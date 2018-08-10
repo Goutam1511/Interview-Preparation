@@ -25,8 +25,8 @@ void inorder(node* r){
 
 void preorder(node* r){
     if(r!=NULL){
-        preorder(r->left);
         cout<<r->key<<" ";
+        preorder(r->left);
         preorder(r->right);
     }
 }
@@ -34,8 +34,8 @@ void preorder(node* r){
 void postorder(node* r){
     if(r!=NULL){
         postorder(r->left);
-        cout<<r->key<<" ";
         postorder(r->right);
+        cout<<r->key<<" ";
     }
 }
 
