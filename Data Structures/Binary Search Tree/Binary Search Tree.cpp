@@ -157,8 +157,11 @@ int main(){//Insertion, Deletion and Traversal of a BST
                 break;
             case 3:
                 inorder(root);
+                cout<<endl;
                 preorder(root);
+                cout<<endl;
                 postorder(root);
+                cout<<endl;
                 break;
             case 4:
                 cout<<" Enter a value to be search :"<<endl;
