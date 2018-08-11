@@ -126,6 +126,37 @@ node* insertnode(node* r,int val){
     return r;
 }
 
+node* deletekey(node* r,int val){
+    if(r==NULL)
+        return r;
+    else if(r->key<val){
+        r->right = deletekey(r->right,val);
+    }
+    else if(val<r->key){
+        r->left = deletekey(r->left,val);
+    }
+    else{
+        if((r->left==NULL)||(r->right==NULL)){
+            node* temp = r->left? r->left : r->right;
+            if(temp==NULL){
+                temp = r;
+                r = NULL;
+            }
+            else{
+                r = temp;
+            }
+            free(temp);
+        }
+        else{
+            node* temp = findmin(r->right);
+            r->key = temp->key;
+            r->right = deletekey(r->right,temp->key);
+            free(temp);
+        }
+    }
+    return r;
+}
+
 int main(){//Insertion, Deletion and Traversal of a BST
     node* root=NULL;
     long int i,n,k;
@@ -153,7 +184,7 @@ int main(){//Insertion, Deletion and Traversal of a BST
             case 2:
                 cout<<" Enter a value to delete :";
                 cin>>n;
-                //root = deletwnode(root,n);
+                root = deletekey(root,n);
                 break;
             case 3:
                 inorder(root);
