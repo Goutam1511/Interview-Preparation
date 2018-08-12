@@ -197,7 +197,7 @@ int main(){//Insertion, Deletion and Traversal of a AVL Tree
                 cout<<endl;
                 break;
             case 4:
-                getHeight(root);
+                cout<<"The required height is "<<getHeight(root)<<endl;
                 break;
         }
         if(i==0)
