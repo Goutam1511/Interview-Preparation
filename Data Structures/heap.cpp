@@ -11,11 +11,11 @@ int heap[100];
 int heapsize=0;
 
 int left(int i){
-    return (2*i);
+    return (2*i+1);
 }
 
 int right(int i){
-    return (2*i+1);
+    return (2*i+2);
 }
 
 int parent(int i){
@@ -30,8 +30,10 @@ void buildheap(int i){
         smallest = l;
     if(r<heapsize&&heap[r]<heap[smallest])
         smallest = r;
-    swap(&heap[i],&heap[smallest]);
-    buildheap(smallest);
+    if(smallest!=i){
+        swap(&heap[i],&heap[smallest]);
+        buildheap(smallest);
+    }
 }
 
 void insertkey(int val){
@@ -53,6 +55,7 @@ int extractmin(){
     int val = heap[0];
     swap(&heap[0],&heap[heapsize-1]);
     heapsize--;
+    cout<<heapsize<<endl;
     buildheap(0);
     return val;
 }
@@ -66,7 +69,7 @@ void decreasekey(int i,int val){
 }
 
 int main(){
-long int i,n,k;
+long int i,n,k,j;
     cout<<"-------- Choose any number from the below sequence -------------"<<endl;
     cout<<" 1. Insert into heap"<<endl;
     cout<<" 2. Extract the minimum value from heap "<<endl;
@@ -92,6 +95,13 @@ long int i,n,k;
                 cin>>k>>n;
                 decreasekey(k,n);
                 break;
+        }
+        if(heapsize){
+            cout<<"Present min heap is :"<<endl;
+            for(j=0;j<heapsize;j++){
+                cout<<heap[j]<<" ";
+            }
+            cout<<endl;
         }
         if(i==0)
             break;
