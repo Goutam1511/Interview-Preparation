@@ -1,0 +1,173 @@
+ARRAYS
+
+1. Kadane's Algorithm -  https://practice.geeksforgeeks.org/problems/kadanes-algorithm/0
+2.Combination Sum - Part 2- https://practice.geeksforgeeks.org/problems/combination-sum-part-2/0
+3.Subarray with given sum- https://practice.geeksforgeeks.org/problems/subarray-with-given-sum/0
+4.Equilibrium point - https://practice.geeksforgeeks.org/problems/equilibrium-point/0
+5.Maximum sum increasing subsequence- https://practice.geeksforgeeks.org/problems/maximum-sum-increasing-subsequence/0
+6.Leaders in an array - https://practice.geeksforgeeks.org/problems/leaders-in-an-array/0
+7.Reverse array in groups- https://practice.geeksforgeeks.org/problems/reverse-array-in-groups/0
+8.K’th smallest element- https://practice.geeksforgeeks.org/problems/kth-smallest-element/0
+//d>Kth largest element in a stream- https://practice.geeksforgeeks.org/problems/kth-largest-element-in-a-stream/0
+9.Trapping Rain Water- https://practice.geeksforgeeks.org/problems/trapping-rain-water/0
+10.Maximum of all subarrays of size k- https://practice.geeksforgeeks.org/problems/maximum-of-all-subarrays-of-size-k/0
+//a>Chocolate Distribution Problem- https://practice.geeksforgeeks.org/problems/chocolate-distribution-problem/0
+//b>Stock buy and sell- https://practice.geeksforgeeks.org/problems/stock-buy-and-sell/0
+11.Element with left side smaller and right side greater- https://practice.geeksforgeeks.org/problems/unsorted-array/0
+12.Convert array into Zig-Zag fashion- https://practice.geeksforgeeks.org/problems/convert-array-into-zig-zag-fashion/0
+//c>Find the element that appears once in sorted array- https://practice.geeksforgeeks.org/problems/find-the-element-that-appears-once-in-sorted-array/0 
+13.Relative Sorting- https://practice.geeksforgeeks.org/problems/relative-sorting/0
+14.Spirally traversing a matrix- https://practice.geeksforgeeks.org/problems/spirally-traversing-a-matrix/0
+15.Sorting Elements of an Array by Frequency- https://practice.geeksforgeeks.org/problems/sorting-elements-of-an-array-by-frequency/0
+16.Largest Number formed from an Array- https://practice.geeksforgeeks.org/problems/largest-number-formed-from-an-array/0
+//e>Largest subarray of 0's and 1's-https://practice.geeksforgeeks.org/problems/largest-subarray-of-0s-and-1s/1
+
+
+
+String :
+
+17.Parenthesis Checker- https://practice.geeksforgeeks.org/problems/parenthesis-checker/0
+18.Reverse words in a given string- https://practice.geeksforgeeks.org/problems/reverse-words-in-a-given-string/0
+19.Permutations of a given string- https://practice.geeksforgeeks.org/problems/permutations-of-a-given-string/0
+20.Longest Palindrome in a String- https://practice.geeksforgeeks.org/problems/longest-palindrome-in-a-string/0
+21.Recursively remove all adjacent duplicates- https://practice.geeksforgeeks.org/problems/recursively-remove-all-adjacent-duplicates/0
+//f>Check if string is rotated by two places- https://practice.geeksforgeeks.org/problems/check-if-string-is-rotated-by-two-places/0
+22.Roman Number to Integer- https://practice.geeksforgeeks.org/problems/roman-number-to-integer/0
+//g>Anagram
+23.Longest Common Substring- https://practice.geeksforgeeks.org/problems/longest-common-substring/0
+//h>Remove Duplicates- https://practice.geeksforgeeks.org/problems/remove-duplicates/0
+24.Form a Palindrome- https://practice.geeksforgeeks.org/problems/form-a-palindrome/0
+25.Longest Distinct Characters in the string- https://practice.geeksforgeeks.org/problems/longest-distinct-characters-in-string/0
+//i>Implement Atoi- https://practice.geeksforgeeks.org/problems/implement-atoi/1
+//j>Implement strstr- https://practice.geeksforgeeks.org/problems/implement-strstr/1
+26.Longest Common Prefix- https://practice.geeksforgeeks.org/problems/longest-common-prefix-in-an-array/0
+
+
+
+Stack and Queue :
+
+//k>Next larger element- https://practice.geeksforgeeks.org/problems/next-larger-element/0
+27.Queue using two Stacks- https://practice.geeksforgeeks.org/problems/queue-using-two-stacks/1
+28.Stack using two queues- https://practice.geeksforgeeks.org/problems/stack-using-two-queues/1
+29.Get minimum element from stack- https://practice.geeksforgeeks.org/problems/get-minimum-element-from-stack/1
+30.LRU Cache- https://practice.geeksforgeeks.org/problems/lru-cache/1
+31.Circular tour- https://practice.geeksforgeeks.org/problems/circular-tour/1
+//l>First non-repeating character in a stream- https://practice.geeksforgeeks.org/problems/first-non-repeating-character-in-a-stream/0
+32.Rotten Oranges- https://practice.geeksforgeeks.org/problems/rotten-oranges/0 
+ 
+
+
+Recursion :
+
+33.Flood fill Algorithm- https://practice.geeksforgeeks.org/problems/flood-fill-algorithm/0
+34.Number of paths- https://practice.geeksforgeeks.org/problems/number-of-paths/0
+35.Combination Sum – Part 2- https://practice.geeksforgeeks.org/problems/combination-sum-part-2/0
+36.Special Keyboard- https://practice.geeksforgeeks.org/problems/special-keyboard/0
+37.Water Overflow- https://practice.geeksforgeeks.org/problems/champagne-overflow/0
+38.Josephus problem- https://practice.geeksforgeeks.org/problems/josephus-problem/1
+
+
+
+Hashing :
+
+39.Largest subarray with 0 sum- https://practice.geeksforgeeks.org/problems/largest-subarray-with-0-sum/1
+40.Swapping pairs make sum equal- https://practice.geeksforgeeks.org/problems/swapping-pairs-make-sum-equal/0
+41.Count distinct elements in every window- https://practice.geeksforgeeks.org/problems/count-distinct-elements-in-every-window/1
+42.Array Pair Sum Divisibility Problem- https://practice.geeksforgeeks.org/problems/array-pair-sum-divisibility-problem/0
+43.Longest consecutive subsequence- https://practice.geeksforgeeks.org/problems/longest-consecutive-subsequence/0
+45.Array Subset of another array- https://practice.geeksforgeeks.org/problems/array-subset-of-another-array/0
+46.Find all pairs with a given sum- https://practice.geeksforgeeks.org/problems/find-all-pairs-whose-sum-is-x/0
+47.Find first repeated character- https://practice.geeksforgeeks.org/problems/find-first-repeated-character/0
+//m>Zero Sum Subarrays- https://practice.geeksforgeeks.org/problems/zero-sum-subarrays/0
+48.Minimum indexed character- https://practice.geeksforgeeks.org/problems/minimum-indexed-character/0
+49.Check if two arrays are equal or not- https://practice.geeksforgeeks.org/problems/check-if-two-arrays-are-equal-or-not/0
+50.Uncommon characters- https://practice.geeksforgeeks.org/problems/uncommon-characters/0
+51.Smallest window in a string containing all the characters of another string- https://practice.geeksforgeeks.org/problems/smallest-window-in-a-string-containing-all-the-characters-of-another-string/0
+52.First element to occur k times- https://practice.geeksforgeeks.org/problems/first-element-to-occur-k-times/0
+53.Check if frequencies can be equal- https://practice.geeksforgeeks.org/problems/check-frequencies/0
+
+
+
+Graph :
+
+//n>Depth First Traversal- https://practice.geeksforgeeks.org/problems/depth-first-traversal-for-a-graph/1
+//o>Breadth First Traversal- https://practice.geeksforgeeks.org/problems/bfs-traversal-of-graph/1
+54.Detect cycle in a directed graph- https://practice.geeksforgeeks.org/problems/detect-cycle-in-a-directed-graph/1
+55.Topological sort- https://practice.geeksforgeeks.org/problems/topological-sort/1
+56.Find the number of islands- https://practice.geeksforgeeks.org/problems/find-the-number-of-islands/1
+57.Implementing Dijkstra- https://practice.geeksforgeeks.org/problems/implementing-dijkstra-set-1-adjacency-matrix/1
+58.Minimum Swaps- https://practice.geeksforgeeks.org/problems/minimum-swaps/1
+59.Strongly Connected Components- https://practice.geeksforgeeks.org/problems/strongly-connected-components-kosarajus-algo/1
+//r>Shortest Source to Destination Path- https://practice.geeksforgeeks.org/problems/shortest-source-to-destination-path/0
+60.Find whether path exist- https://practice.geeksforgeeks.org/problems/find-whether-path-exist/0
+//q>Minimum Cost Path- https://practice.geeksforgeeks.org/problems/minimum-cost-path/0
+61.Circle of Strings- https://practice.geeksforgeeks.org/problems/circle-of-strings/0
+//p>Floyd Warshall- https://practice.geeksforgeeks.org/problems/implementing-floyd-warshall/0
+62.Alien Dictionary- https://practice.geeksforgeeks.org/problems/alien-dictionary/1
+63.Snake and Ladder Problem- https://practice.geeksforgeeks.org/problems/snake-and-ladder-problem/0
+
+
+
+
+Greedy :
+
+64.Activity Selection- https://practice.geeksforgeeks.org/problems/activity-selection/0
+65.N meetings in one room- https://practice.geeksforgeeks.org/problems/n-meetings-in-one-room/0
+66.Coin Piles- https://practice.geeksforgeeks.org/problems/coin-piles/0
+67.Minimum number of Coins- https://practice.geeksforgeeks.org/problems/-minimum-number-of-coins/0
+68.Maximize Toys- https://practice.geeksforgeeks.org/problems/maximize-toys/0
+69.Page Faults in LRU- https://practice.geeksforgeeks.org/problems/page-faults-in-lru/0
+70.Largest number possible- https://practice.geeksforgeeks.org/problems/largest-number-possible/0
+71.Minimize the heights- https://practice.geeksforgeeks.org/problems/minimize-the-heights/0
+72.Minimize the sum of product- https://practice.geeksforgeeks.org/problems/minimize-the-sum-of-product/0
+73.Huffman Decoding- https://practice.geeksforgeeks.org/problems/huffman-decoding-1/1
+74.Max length chain- https://practice.geeksforgeeks.org/problems/max-length-chain/1
+//s>Minimum Spanning Tree- https://practice.geeksforgeeks.org/problems/minimum-spanning-tree/1
+75.Minimum Operations- https://practice.geeksforgeeks.org/problems/find-optimum-operation/0
+76.Shop in Candy Store- https://practice.geeksforgeeks.org/problems/shop-in-candy-store/0
+77.Geek collects the balls- https://practice.geeksforgeeks.org/problems/geek-collects-the-balls/0
+
+
+
+Dynamic Programming :
+
+87.Longest Increasing Subsequence- https://practice.geeksforgeeks.org/problems/longest-increasing-subsequence/0
+88.Longest Common Subsequence- https://practice.geeksforgeeks.org/problems/longest-common-subsequence/0
+//t>0 – 1 Knapsack Problem- https://practice.geeksforgeeks.org/problems/0-1-knapsack-problem/0
+89.Minimum number of jumps- https://practice.geeksforgeeks.org/problems/minimum-number-of-jumps/0
+90.Edit Distance- https://practice.geeksforgeeks.org/problems/edit-distance/0
+91.Coin Change Problem- https://practice.geeksforgeeks.org/problems/coin-change/0
+92.Subset Sum Problem- https://practice.geeksforgeeks.org/problems/subset-sum-problem/0
+93.Box Stacking- https://practice.geeksforgeeks.org/problems/box-stacking/1
+94.Rod Cutting- https://practice.geeksforgeeks.org/problems/cutted-segments/0
+95.Path in Matrix- https://www.geeksforgeeks.org/find-the-longest-path-in-a-matrix-with-given-constraints/
+96.Minimum sum partition- https://practice.geeksforgeeks.org/problems/minimum-sum-partition/0
+97.Count number of ways to cover a distance- https://practice.geeksforgeeks.org/problems/count-number-of-hops/0
+98.Egg Dropping Puzzle- https://practice.geeksforgeeks.org/problems/egg-dropping-puzzle/0
+99.Optimal Strategy for a Game- https://practice.geeksforgeeks.org/problems/tom-and-jerry/0
+100.Shortest Common Supersequence- https://practice.geeksforgeeks.org/problems/shortest-common-supersequence/0
+
+
+
+
+Divide and Conquer :
+
+//u>Binary Search- https://practice.geeksforgeeks.org/problems/binary-search/1
+//v>Quick Sort- https://practice.geeksforgeeks.org/problems/quick-sort/1
+//w>Merge Sort- https://practice.geeksforgeeks.org/problems/merge-sort/1
+101.Find the element that appears once in sorted array- https://practice.geeksforgeeks.org/problems/find-the-element-that-appears-once-in-sorted-array/0
+102.K-th element of two sorted Arrays- https://practice.geeksforgeeks.org/problems/k-th-element-of-two-sorted-array/0
+103.Last index of One- https://practice.geeksforgeeks.org/problems/last-index-of-1/0
+
+
+
+Backtracking :
+
+//x>N-Queen Problem- https://practice.geeksforgeeks.org/problems/n-queen-problem/0
+104.Solve the Sudoku- https://practice.geeksforgeeks.org/problems/solve-the-sudoku/0
+105.Rat in a Maze Problem- https://practice.geeksforgeeks.org/problems/rat-in-a-maze-problem/1
+106.Word Boggle- https://practice.geeksforgeeks.org/problems/word-boggle/0
+107.Generate IP Addresses- https://practice.geeksforgeeks.org/problems/generate-ip-addresses/1
+
+
+
