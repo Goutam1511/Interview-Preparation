@@ -1,6 +1,11 @@
-/*This problem is a variation of standard Longest Increasing Subsequence (LIS) problem.
+/*
+This problem is a variation of standard Longest Increasing Subsequence (LIS) problem.
 We need a slight change in the Dynamic Programming solution of LIS problem.
-All we need to change is to use sum as a criteria instead of length of increasing subsequence.*/
+All we need to change is to use sum as a criteria instead of length of increasing subsequence.
+Also in order to find out elements of the longest sum increasing subsequence we are going to store the indexes of the array
+while finding out the subsequence. For that we are needing a vector of pair. Also a stack is used to store the indexes while backtracking the
+lsis vector and finally the stack is popped out to print the indexed of lsis in sequential order.
+*/
 
 #include <bits/stdc++.h>
 using namespace std;
