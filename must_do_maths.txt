@@ -1,0 +1,24 @@
+Mathematics based problems:
+
+
+//y>Hyperfactorial of a number- https://www.geeksforgeeks.org/hyperfactorial-of-a-number/
+108.Count number of right triangles possible with a given perimeter- https://www.geeksforgeeks.org/count-number-of-right-triangles-possible-with-a-given-perimeter/
+109.Sum of sum of all subsets of a set formed by first N natural numbers- https://www.geeksforgeeks.org/sum-of-sum-of-all-subsets-of-a-set-formed-by-first-n-natural-numbers/
+110.Count pairs with Bitwise AND as ODD number- https://www.geeksforgeeks.org/count-pairs-with-bitwise-and-as-odd-number/
+111.Greatest Digital Root- https://www.geeksforgeeks.org/sudo-placement1-7-greatest-digital-root/
+//z>Program to find HCF (Highest Common Factor) of 2 Numbers- https://www.geeksforgeeks.org/program-to-find-hcf-highest-common-factor-of-2-numbers/
+112.Surd number- https://www.geeksforgeeks.org/surd-number/
+113.Probability of a key K present in array- https://www.geeksforgeeks.org/probability-of-a-key-k-present-in-array/
+**114.Program to find last two digits of 2^n- https://www.geeksforgeeks.org/program-to-find-last-two-digits-of-2n/
+115.Largest number with maximum trailing nines which is less than N and greater than N-D- https://www.geeksforgeeks.org/print-the-the-number-with-maximum-number-of-trailing-nines-less-than-n-and-greater-than-n-d/
+116.Find gcd(a^n, c) where a, n and c can vary from 1 to 10^9- https://www.geeksforgeeks.org/find-gcdan-c-where-a-n-and-c-can-vary-from-1-to-109/
+117.Number of subarrays with odd sum- https://www.geeksforgeeks.org/number-of-subarrays-with-odd-sum/
+**118.Longest subarray having average greater than or equal to x- https://www.geeksforgeeks.org/longest-subarray-having-average-greater-than-or-equal-to-x/
+119.Probability that the pieces of a broken stick form a n sided polygon- https://www.geeksforgeeks.org/probability-that-the-pieces-of-a-broken-stick-form-a-n-sided-polygon/
+120.Calculating n-th real root using binary search- https://www.geeksforgeeks.org/calculating-n-th-real-root-using-binary-search/
+121.Angle between two Planes in 3D- https://www.geeksforgeeks.org/angle-between-two-planes-in-3d/
+122.Find the slope of the given number- https://www.geeksforgeeks.org/find-the-slope-of-the-given-number/
+123.Distance between a point and a Plane in 3 D- https://www.geeksforgeeks.org/distance-between-a-point-and-a-plane-in-3-d/
+124.Program to print factors of a number in pairs- https://www.geeksforgeeks.org/program-to-print-factors-of-a-number-in-pairs/
+
+
