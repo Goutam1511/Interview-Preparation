@@ -1,3 +1,14 @@
 Basics of Singly Linked List - Insertion, Deletion, Traversal and Reversal
 Detect Loop in a Linked List
 Basics of Doubly Linked List - Insertion, Deletion, Traversal and Reversal
+
+To be implemented/Should be at least known :
+
+Remove duplicates from a sorted linked list
+Pairwise swap elements of a given linked list
+Move last element to front of a given Linked List
+Function to check if a singly linked list is palindrome
+Intersection of two Sorted Linked Lists
+Intersection point of two Linked Lists
+QuickSort on Singly Linked List
+Segregate even and odd nodes in a Linked List
