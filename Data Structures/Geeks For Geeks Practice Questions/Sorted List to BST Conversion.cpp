@@ -99,6 +99,13 @@ block* findmiddle(block* start,int n){
     return ptr;
 }
 
+/*
+
+Recursively build the BST by allocating the middle element as root and then going on building the BST by splitting the 
+list into two. The smaller elements in left of list will be the left subtree and the bigger will be the right.
+
+*/
+
 node* convertlisttotree(block* start,block* endlist){
     int i;
     if(start!=endlist&&start->next!=endlist){
