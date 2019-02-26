@@ -1,3 +1,11 @@
+/*
+    The solution is a 3-step solution that does the following -
+    1. First stores the BST traversing in-order wise in an array.
+    2. Sorts the array.
+    3. Copies the sorted array back to BST in-order wise.
+    The logic is that copying the sorted array while traversing in-orderwise will automatically form the BST 
+     as in-order traversal of a BST is always a sorted array.
+*/
 #include <bits/stdc++.h>
 using namespace std;
 
