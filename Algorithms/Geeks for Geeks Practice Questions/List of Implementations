@@ -3,5 +3,8 @@ Print a given array with first half sorted in ascending order and second half in
 Maximum sum of Longest Increasing Subsequence
 Leaders in an array
 Remove K Digits to form Smallest number
+Previous Greater Element in a Stream of Numbers or Online Stock Plan
 Single element in a sorted array
 Maximum sum in a circular subarray
+Counting set bits from 1 to n - https://leetcode.com/problems/counting-bits/
+Minimum edit distance(Dynamic Programming)
