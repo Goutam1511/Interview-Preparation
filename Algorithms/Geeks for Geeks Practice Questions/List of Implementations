@@ -10,3 +10,4 @@ Counting set bits from 1 to n - https://leetcode.com/problems/counting-bits/
 Minimum edit distance (Dynamic Programming)
 Single Number in an Array (XOR Property)
 Largest Sum Contagious Subarray or Kadane's Algorithm
+Longest Contagious Array having equal 0s and 1s
