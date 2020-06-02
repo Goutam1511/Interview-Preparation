@@ -3,6 +3,7 @@ Detect Loop in a Linked List
 Remove the nth node from last
 Basics of Doubly Linked List - Insertion, Deletion, Traversal and Reversal
 Seperate Odd and Even Nodes from Linked List and merge with Odd Nodes in front and Even then
+Delete a node from the Linked List without the head given
 
 To be implemented/Should be at least known :
 
