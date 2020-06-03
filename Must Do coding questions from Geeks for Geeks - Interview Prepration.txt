@@ -24,6 +24,7 @@ ARRAYS
 
 
 
+
 String :
 
 17.Parenthesis Checker- https://practice.geeksforgeeks.org/problems/parenthesis-checker/0
@@ -158,6 +159,7 @@ Divide and Conquer :
 101.Find the element that appears once in sorted array- https://practice.geeksforgeeks.org/problems/find-the-element-that-appears-once-in-sorted-array/0
 102.K-th element of two sorted Arrays- https://practice.geeksforgeeks.org/problems/k-th-element-of-two-sorted-array/0
 103.Last index of One- https://practice.geeksforgeeks.org/problems/last-index-of-1/0
+104.Count Inversions in an Array - https://www.geeksforgeeks.org/counting-inversions/
 
 
 
