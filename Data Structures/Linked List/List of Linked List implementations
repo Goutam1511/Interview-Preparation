@@ -4,10 +4,10 @@ Remove the nth node from last
 Basics of Doubly Linked List - Insertion, Deletion, Traversal and Reversal
 Seperate Odd and Even Nodes from Linked List and merge with Odd Nodes in front and Even then
 Delete a node from the Linked List without the head given
+Remove Duplicates from a Sorted Linked List
 
 To be implemented/Should be at least known :
 
-Remove duplicates from a sorted linked list
 Pairwise swap elements of a given linked list
 Move last element to front of a given Linked List
 Function to check if a singly linked list is palindrome
