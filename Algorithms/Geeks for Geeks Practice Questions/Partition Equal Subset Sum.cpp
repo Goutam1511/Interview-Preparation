@@ -29,11 +29,14 @@ will be true if there exists a subset of elements from A[0….i] with sum value 
 if (A[i] > j)
 DP[i][j] = DP[i-1][j]
 else 
-DP[i][j] = DP[i-1][j] OR DP[i-1][sum-A[i]]
+DP[i][j] = DP[i-1][j] OR DP[i-1][j-A[i]]
 
-This means that if current element has value greater than ‘current sum value’ we will copy the answer for previous cases
-And if the current sum value is greater than the ‘ith’ element we will see if any of previous states have already experienced the
-sum=’j’ OR any previous states experienced a value ‘j – A[i]’ which will solve our purpose.
+This means that if current element has value greater than ‘current sum value’ we will copy the answer for set until that point without
+that element hence DP[i - 1][j] i.e. if it is possible to make the sum with the elements already on set even without considering the
+current element,
+And if the current sum value is greater than the ‘ith’ element we will see if it is possible to construct the sum with the elements 
+already on the set hence DP[i - 1][j] or if it is possible to construct a sum of (j - A[j]) with the elements already on the set without
+considering the current element which will solve our purpose hence DP[i - 1][j - A[j]].
 
 The below simulation will clarify the above approach:
 
