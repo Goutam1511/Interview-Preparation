@@ -56,6 +56,9 @@ Count of 1s in each position --> 1 0 1 3 (0th position : 3 1s from 1,
 Count of 1s after modulus 3  --> 1 0 1 0 (binary representation of 10)
 
 Output: 10
+
+Time Complexity  : 32 * n --> O(n)
+Space Complexity : 32 bit array --> O(1)
 */
 
 class Solution {
