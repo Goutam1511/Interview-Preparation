@@ -55,6 +55,17 @@ Input:
 Output: 8
 Explanation:The maximum width existing in the fourth level with the length 8
 (6,null,null,null,null,null,null,7).
+
+Corner case :
+                  1
+		 / \
+		2   3
+		   /
+		   4
+		 /   \
+		1     2
+	       / \   / \
+	      1   2 3   4
  
 Solution Approach : We go on traversing the nodes level using two queues following
 (Reference : Binary Tree Bottom up Level Order Traversal (Github)). While storing
@@ -78,7 +89,7 @@ public:
  
     int widthOfBinaryTree(TreeNode* root) {
         int maxwidth = 0;
-        vector<pair<TreeNode*, long long int>> q;
+        vector<pair<TreeNode*, unsigned long long int>> q;
         bool nextlevhasnode = true;
  
         if (root == NULL)
@@ -87,7 +98,7 @@ public:
         q.push_back(make_pair(root, 1)); //Push the root in current queue
  
         while (q.size()) { //While current queue is not empty
-            vector<pair<TreeNode*, long long int>> nextlev; //The queue/vector for next level nodes
+            vector<pair<TreeNode*, unsigned long long int>> nextlev; //The queue/vector for next level nodes
             int currentwidth;
  
             /* find the difference of position of first node and the last node in the queue *
@@ -99,10 +110,10 @@ public:
             for (int i = 0; i < q.size(); i++) { 
             	//For each node in current queue, add their children in nextlev queue
                 if (q[i].first->left) {
-                    nextlev.push_back(make_pair(q[i].first->left, (long long)((long long)q[i].second * 2)));
+                    nextlev.push_back(make_pair(q[i].first->left, (unsigned long long)((unsigned long long)q[i].second * 2)));
                 }
                 if (q[i].first->right) {
-                    nextlev.push_back(make_pair(q[i].first->right, (long long)((long long)q[i].second * 2) + 1));
+                    nextlev.push_back(make_pair(q[i].first->right, (unsigned long long)((unsigned long long)q[i].second * 2) + 1));
                 }
             }
  
