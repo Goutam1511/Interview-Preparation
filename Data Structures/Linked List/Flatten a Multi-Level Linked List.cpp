@@ -84,6 +84,8 @@ Solution : Use recursion and go on iterating, if a child is found, store the nex
 The recursive function returns the last node of the child level, so append the next node stored to the last node returned from the recursion.
 Do this recursively until the last node of the first level is reached. The lastnode of the first level can again contain child so that needs
 to be handled seperately using the same logic again.
+
+Time Complexity : O(n) as all nodes are visited only once.
 */
 
 class Solution {
