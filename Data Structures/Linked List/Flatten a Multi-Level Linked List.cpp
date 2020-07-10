@@ -95,18 +95,18 @@ public:
         Node* nextnode = NULL;
         Node* lastnode = NULL;
         
-        while (current->next != NULL) { //Until the last node of the current level is reached
-            if (current->child) { //If child exists flatten it recursively
-                nextnode             = current->next; //Store the next node before entering the recursion
-                current->next        = current->child; //Append the child to the current level to flatten the child level
+        while (current->next != NULL) {                             //Until the last node of the current level is reached
+            if (current->child) {                                   //If child exists flatten it recursively
+                nextnode             = current->next;               //Store the next node before entering the recursion
+                current->next        = current->child;              //Append the child to the current level to flatten the child level
                 lastnode             = flattenlist(current->child); //Get the lastnode of the child level
-                current->child->prev = current; //Reset the prev pointer of the child node
-                current->child       = NULL; //Current now has no child as the child level has been flattened
-                lastnode->next       = nextnode; //Append the stored next node to the last node of the child level
-                nextnode->prev       = lastnode; //Set the prev pointer of the stored next node to point to lastnode of child level
-                current              = nextnode; //Continue with the iteration from next node
+                current->child->prev = current;                     //Reset the prev pointer of the child node
+                current->child       = NULL;                        //Current now has no child as the child level has been flattened
+                lastnode->next       = nextnode;                    //Append the stored next node to the last node of the child level
+                nextnode->prev       = lastnode;                    //Set the prev pointer of the stored next node to point to lastnode of child level
+                current              = nextnode;                    //Continue with the iteration from next node
             } else {
-                current = current->next; //Go on iterating until last node
+                current = current->next;                            //Go on iterating until last node
             }
         }
         
@@ -124,13 +124,13 @@ public:
         
         lastnode = flattenlist(head); The multi-level list is flattened till the last node of first level
         
-        while (lastnode->child) { //The last node of first level needs to be handled seperately to counter the corner case mentioned above
+        while (lastnode->child) {              //The last node of first level needs to be handled seperately to counter the corner case mentioned above
             current         = lastnode->child; 
             current->prev   = lastnode; 
-            lastnode->next  = current; //Append the child to the last node
-            lastnode->child = NULL; //Set the child of the last node to NULL
-            lastnode        = current; //Now last node is the appended child
+            lastnode->next  = current;         //Append the child to the last node
+            lastnode->child = NULL;            //Set the child of the last node to NULL
+            lastnode        = current;         //Now last node is the appended child
         } 
-        return head; //Return the head of the newly flattened list
+        return head;                           //Return the head of the newly flattened list
     }
 };
