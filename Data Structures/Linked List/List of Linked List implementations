@@ -7,6 +7,7 @@ Delete a node from the Linked List without the head given
 Remove Duplicates from a Sorted Linked List
 Flatten a Multi-Level Doubly Linked List
 Remove all occurrences of a value from Linked List
+Add Two Numbers | LeetCode
 
 To be implemented/Should be at least known :
 
@@ -16,4 +17,3 @@ Function to check if a singly linked list is palindrome
 Intersection of two Sorted Linked Lists
 Intersection point of two Linked Lists
 QuickSort on Singly Linked List
-Segregate even and odd nodes in a Linked List
