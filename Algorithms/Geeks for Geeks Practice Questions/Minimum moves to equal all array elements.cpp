@@ -34,14 +34,19 @@ class Solution {
 public:
     int minMoves2(vector<int>& nums) {
         int mid, moves = 0;
-        
+        /* Find the mid index - for odd size, this is size/2 but for even size,
+         * this is size/2 - 1. For example, for [1, 2, 3, 4], this is arr[1] = 2.
+         */
         mid = nums.size() % 2 ? nums.size() / 2 : nums.size() / 2 - 1;
         
         sort(nums.begin(), nums.end());
         
         for (int i = 0; i < nums.size(); i++) {
             if (i != mid) {
-                moves += abs(nums[i] - nums[mid]);
+                /* The number of moves needed is the element to be converted to
+                 * - the current element value
+                 */
+                moves += abs(nums[i] - nums[mid]); 
             }
         }
         
