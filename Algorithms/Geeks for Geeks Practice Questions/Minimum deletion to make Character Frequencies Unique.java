@@ -31,6 +31,10 @@ s contains only lowercase English letters.
 Solution : As we can only delete characters, if we have multiple characters having the same frequency, we must decrease all the frequencies of them, except one.
 Sort the alphabet characters by their frequencies non-increasingly. Iterate on the alphabet characters, keep decreasing the frequency of the current character 
 until it reaches a value that has not appeared before.
+
+Time & Space complexity : O(n) - time O(1) space. Although it looks like we are using heap but actually heap is used for comparing 26 character frequencies only.
+So the major work is to build the character frequency array and then iterating till we find unique frequency for each character through decrementing the count which
+again will be at max the length of string for 26 characters each.
 */
 
 class Solution {
