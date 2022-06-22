@@ -21,6 +21,46 @@ using namespace std;
  Input: num = "10", k = 2
  Output: "0"
  Explanation: Remove all the digits from the number and it is left with nothing which is 0.
+ 
+ Solution : UPDATE 22/06/2022 - A better solution would be to use a monotonic stack and whenever we encounter a larger number than stack top, go on popping
+ until we encounter a smaller number in top of stack or we exhaust the number of digits that can be removed. We do this because as long as there is a larger
+ number in left, we can never make a smaller number removing digits in right.
+ 
+ EDGE CASES : After removal of k digits, check for leading zeroes.
+ 
+ Time and Space : O(number of digits)
+ 
+ class Solution {
+    public String removeKdigits(String num, int k) {
+        if (k == num.length()) {
+            return "0";
+        }
+        Stack<Character> s = new Stack<>();
+        for (char c : num.toCharArray()) {
+            while (!s.isEmpty() && s.peek() > c && k > 0) {
+                s.pop();
+                k--;
+            }
+            s.push(c);
+        }
+        while (k-- > 0 && !s.isEmpty()) {
+            s.pop();
+        }
+        String res = "";
+        while (!s.isEmpty()) {
+            res = String.valueOf(s.pop()) + res;
+        }
+        //System.out.println(res);
+        int i = 0;
+        while (i < res.length() && res.charAt(i) == '0') {
+            i++;
+        }
+        if (i < res.length())
+            return res.substring(i);
+
+        return "0";
+    }
+}
  */
 
 class Solution {
