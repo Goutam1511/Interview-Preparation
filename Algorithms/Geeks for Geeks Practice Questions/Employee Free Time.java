@@ -26,6 +26,8 @@ Constraints:
 Solution : This is an extension to https://leetcode.com/problems/insert-interval/
 We first merge all the schedules of employees to get a final set of intervals when all employees are engaged. And then loop over that final set of intervals
 to find intervals where employees are free.
+
+Better solution using priority queue : https://leetcode.com/problems/employee-free-time/discuss/195308/Java-PriorityQueue-Solution-Time-complexity-O(N-log-K)
 */
 
 /*
