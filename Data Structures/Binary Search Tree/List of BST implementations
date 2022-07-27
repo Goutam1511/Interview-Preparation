@@ -19,3 +19,4 @@ Maximum Difference Between Node and Ancestor | BT | LeetCode
 Balanced Binary Tree | Recursion | LeetCode
 Inorder Successor in BST | BST | LeetCode
 Find Leaves of Binary Tree | BT traversal + Treemap | LeetCode
+Flatten Binary Tree to Linked List | BT Post Order + LinkedList | LC
