@@ -18,6 +18,18 @@ Example 3:
 Input: root = [1,1,0,1,1,0,1,0]
 Output: [1,1,0,1,1,null,1]
 
+Corner Cases :
+
+[1]
+[0]
+[1,1]
+[1,0]
+[1,null,1]
+[1,null,0]
+[0,1]
+[0,0]
+[0,null,1]
+
 Constraints:
 
 The number of nodes in the tree is in the range [1, 200].
@@ -82,3 +94,29 @@ public:
         return NULL;
     }
 };
+
+/*
+Java Solution -
+
+class Solution {
+    public boolean pruneSubTrees(TreeNode node) {
+        if (node == null) return false;
+        boolean leftContains1 = pruneSubTrees(node.left);
+        boolean righContains1 = pruneSubTrees(node.right);
+        
+        if (!leftContains1) {
+            node.left = null;
+        }
+        if (!righContains1) {
+            node.right = null;
+        }
+        return leftContains1 || righContains1 || node.val == 1;
+    }
+    public TreeNode pruneTree(TreeNode root) {
+        if (!pruneSubTrees(root)) {
+            return null;
+        }
+        return root;
+    }
+}
+*/
