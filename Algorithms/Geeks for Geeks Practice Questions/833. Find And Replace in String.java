@@ -66,7 +66,7 @@ class Solution {
         for (int i = 0; i < opsLen; i++) {
             operations[i] = new ops(sources[i], targets[i], indices[i]);
         }
-        
+        //Sort the operations according to indices of the string and then perform replacement operations from end of string
         Arrays.sort(operations, (a, b) -> a.idx - b.idx);
         
         StringBuffer sb = new StringBuffer(s);
