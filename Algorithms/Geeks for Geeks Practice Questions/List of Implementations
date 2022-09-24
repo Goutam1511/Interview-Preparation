@@ -96,3 +96,4 @@ Maximum Score from Performing Multiplication Operations | DP | LC
 746. Min Cost Climbing Stairs | DP | LC
 985. Sum of Even Numbers After Queries | Maths | LC
 1386. Cinema Seat Allocation | Greedy + Bit Manipulation | LC
+2110. Number of Smooth Descent Periods of a Stock | Arrays + Math | LC
