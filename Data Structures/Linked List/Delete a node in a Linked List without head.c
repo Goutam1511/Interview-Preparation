@@ -57,3 +57,16 @@ void deleteNode(struct ListNode* node) {
     node->next = NULL; //Set the penultimate node as last node
     free(temp); //Free last node
 }
+
+/*
+Optimisation : No need to copy whole list after the given node. Just copying the next node is enough.
+LeetCode : 237. Delete Node in a Linked List
+class Solution {
+    public void deleteNode(ListNode node) {
+        node.val = node.next.val;
+        node.next = node.next.next;
+    }
+}
+
+Time : O(1)
+*/
