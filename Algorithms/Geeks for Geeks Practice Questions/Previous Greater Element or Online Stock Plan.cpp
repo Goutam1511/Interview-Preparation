@@ -85,13 +85,30 @@ public:
     }
 };
 
-/**
- * Your StockSpanner object will be instantiated and called as such:
- * StockSpanner* obj = new StockSpanner();
- * int param_1 = obj->next(price);
- */
-
 int main() {
 	// Online Stock Plan LeetCode May Challenge 2020
 	return 0;
 }
+
+/*
+Java Solution: 901. Online Stock Span Solution : https://leetcode.com/problems/online-stock-span/solution/
+
+class StockSpanner {
+    Stack<Pair<Integer, Integer>> lastPricesWithSpan = new Stack<>();
+    public StockSpanner() {
+        
+    }
+    
+    public int next(int price) {
+        int span = 1;
+        
+        while (!lastPricesWithSpan.isEmpty()
+               && lastPricesWithSpan.peek().getKey() <= price) {
+            Pair<Integer, Integer> p = lastPricesWithSpan.pop();
+            span += p.getValue();
+        }
+        lastPricesWithSpan.push(new Pair(price, span));
+        return span;
+    }
+}
+*/
