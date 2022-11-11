@@ -109,3 +109,4 @@ Maximum Score from Performing Multiplication Operations | DP | LC
 433. Minimum Genetic Mutation | BFS | LC
 345.Reverse Vowels of a String | Two Pointers | LC
 2131. Longest Palindrome by Concatenating Two Letter Words | HashMap + Palindrome | LC
+26. Remove Duplicates from Sorted Array | 2 pointers | LC
