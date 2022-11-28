@@ -113,3 +113,4 @@ Maximum Score from Performing Multiplication Operations | DP | LC
 295. Find Median from Data Stream | Heap / PQ | LC
 279. Perfect Squares | DP | LC
 1926. Nearest Exit from Entrance in Maze | BFS | LC
+2225. Find Players With Zero or One Losses | Hashing | LC
