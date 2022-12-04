@@ -115,3 +115,4 @@ Maximum Score from Performing Multiplication Operations | DP | LC
 1926. Nearest Exit from Entrance in Maze | BFS | LC
 2225. Find Players With Zero or One Losses | Hashing | LC
 1704. Determine if String Halves Are Alike | Strings | LC
+2256. Minimum Average Difference | Prefix Sum | LC
