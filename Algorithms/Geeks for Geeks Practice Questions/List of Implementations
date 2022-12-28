@@ -117,3 +117,5 @@ Maximum Score from Performing Multiplication Operations | DP | LC
 1704. Determine if String Halves Are Alike | Strings | LC
 2256. Minimum Average Difference | Prefix Sum | LC
 1415. The k-th Lexicographical String of All Happy Strings of Length n | Recursion / Backtracking | LC
+2279. Maximum Bags With Full Capacity of Rocks | Sorting + Greedy | LC
+1962. Remove Stones to Minimize the Total | Heap + Greedy | LC
