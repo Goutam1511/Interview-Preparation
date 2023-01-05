@@ -119,3 +119,4 @@ Maximum Score from Performing Multiplication Operations | DP | LC
 1415. The k-th Lexicographical String of All Happy Strings of Length n | Recursion / Backtracking | LC
 2279. Maximum Bags With Full Capacity of Rocks | Sorting + Greedy | LC
 1962. Remove Stones to Minimize the Total | Heap + Greedy | LC
+944. Delete Columns to Make Sorted | Array | LC
