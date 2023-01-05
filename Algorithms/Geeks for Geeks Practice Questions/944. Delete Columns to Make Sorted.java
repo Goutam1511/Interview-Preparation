@@ -43,6 +43,9 @@ n == strs.length
 1 <= strs[i].length <= 1000
 strs[i] consists of lowercase English letters.
 
+Time Complexity : O(mn), as we are looping through each rows (say m) and columns (say n)
+Space Complexity: O(1), as no extra space has been used
+
 */
 
 class Solution {
