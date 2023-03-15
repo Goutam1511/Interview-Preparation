@@ -24,3 +24,4 @@ Construct String from Binary Tree | PostOrder | LC
 Same Tree | Binary Tree | LC
 993. Cousins in Binary Tree | Preorder | LC
 951. Flip Equivalent Binary Trees | BT / Recursion | LC
+958. Check Completeness of a Binary Tree | BFS | LC
