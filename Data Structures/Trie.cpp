@@ -129,3 +129,58 @@ int main() {
     cout<<obj->startsWith("app")<<endl;
 	return 0;
 }
+
+/*
+
+class Trie {
+    static class TrieNode {
+        boolean endOfWord;
+        Map<Character, TrieNode> neighbors;
+        
+        TrieNode(boolean e) {
+            endOfWord = false;
+            neighbors = new HashMap<>();
+        }
+    }
+    TrieNode root = null;
+    public Trie() {
+        root = new TrieNode(false);
+    }
+    
+    public void insert(String word) {
+        TrieNode temp = root;
+        
+        for (char c : word.toCharArray()) {
+            if (!temp.neighbors.containsKey(c))
+                temp.neighbors.put(c, new TrieNode(false));
+            temp = temp.neighbors.get(c);
+        }
+        temp.endOfWord = true;
+    }
+    
+    public boolean search(String word) {
+        TrieNode temp = root;
+        
+        for (char c : word.toCharArray()) {
+            if (!temp.neighbors.containsKey(c)) {
+                return false;
+            }
+            temp = temp.neighbors.get(c);
+        }
+        return temp.endOfWord;
+    }
+    
+    public boolean startsWith(String word) {
+        TrieNode temp = root;
+        
+        for (char c : word.toCharArray()) {
+            if (!temp.neighbors.containsKey(c)) {
+                return false;
+            }
+            temp = temp.neighbors.get(c);
+        }
+        return true;
+    }
+}
+
+*/
