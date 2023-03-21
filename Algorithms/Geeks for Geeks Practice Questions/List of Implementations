@@ -127,3 +127,4 @@ Maximum Score from Performing Multiplication Operations | DP | LC
 207. Course Schedule | Topological Sort / BFS | LC
 443. String Compression | String + 2 Pointer | LC
 2187. Minimum Time to Complete Trips | Binary Search | LC
+2348. Number of Zero-Filled Subarrays | Maths | LC
