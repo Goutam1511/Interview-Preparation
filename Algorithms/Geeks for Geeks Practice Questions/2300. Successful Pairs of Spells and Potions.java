@@ -33,6 +33,7 @@ m == potions.length
 
 Solution : Sort the potions array and binary search for the least index for which the potions[minIndex] * spell[i] is >= success.
 Potions.length - minIndex is count of the spell.
+Time Complexity : O(nlogn) Space Complexity : O(1)
 */
 
 class Solution {
