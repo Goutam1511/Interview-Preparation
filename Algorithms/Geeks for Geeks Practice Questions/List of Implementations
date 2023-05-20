@@ -131,3 +131,4 @@ Maximum Score from Performing Multiplication Operations | DP | LC
 2300. Successful Pairs of Spells and Potions | Binary Search + Greedy | LC
 2405. Optimal partition of string | Greedy | LC
 1254. Number of Closed Islands | DFS | LC
+1557. Minimum Number of Vertices to Reach All Nodes | Graph | LC
