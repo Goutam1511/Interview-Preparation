@@ -132,3 +132,4 @@ Maximum Score from Performing Multiplication Operations | DP | LC
 2405. Optimal partition of string | Greedy | LC
 1254. Number of Closed Islands | DFS | LC
 1557. Minimum Number of Vertices to Reach All Nodes | Graph | LC
+1584. Min Cost to Connect All Points | MST | LC
