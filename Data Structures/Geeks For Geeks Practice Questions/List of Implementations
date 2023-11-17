@@ -5,3 +5,4 @@ Remove the middle element of a stack in constant time using Doubly Linked list i
 Convert a min heap to a max heap (Need reduction of Time complexity - Not the best approach)
 Clone Graph | Graph | LeetCode
 Number of connected components in a graph | DFS | LeetCode
+1845. Seat Reservation Manager | Treeset / Minheap | LeetCode
