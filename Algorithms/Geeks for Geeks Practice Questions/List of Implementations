@@ -135,3 +135,4 @@ Maximum Score from Performing Multiplication Operations | DP | LC
 1584. Min Cost to Connect All Points | MST | LC
 1877. Minimize Maximum Pair Sum in Array | Two pointer | Leetcode
 1814. Count Nice Pairs in an Array | Map | LeetCode
+1887. Reduction Operations to Make the Array Elements Equal | Sorting + Math | Leetcode
