@@ -136,3 +136,4 @@ Maximum Score from Performing Multiplication Operations | DP | LC
 1877. Minimize Maximum Pair Sum in Array | Two pointer | Leetcode
 1814. Count Nice Pairs in an Array | Map | LeetCode
 1887. Reduction Operations to Make the Array Elements Equal | Sorting + Math | Leetcode
+840. Magic Squares in a Grid | Matrix | Leetcode
