@@ -137,3 +137,4 @@ Maximum Score from Performing Multiplication Operations | DP | LC
 1814. Count Nice Pairs in an Array | Map | LeetCode
 1887. Reduction Operations to Make the Array Elements Equal | Sorting + Math | Leetcode
 840. Magic Squares in a Grid | Matrix | Leetcode
+2257. Count Unguarded Cells in the Grid | Simulation | Leetcode
