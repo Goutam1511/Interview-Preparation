@@ -140,3 +140,4 @@ Maximum Score from Performing Multiplication Operations | DP | LC
 2257. Count Unguarded Cells in the Grid | Simulation | Leetcode
 3652. Best Time to Buy and Sell Stock using Strategy | Sliding Window | Leetcode
 1161. Maximum Level Sum of a Binary Tree | BFS | Leetcode
+865. Smallest Subtree with all the Deepest Nodes | Binary Tree | Leetcode
