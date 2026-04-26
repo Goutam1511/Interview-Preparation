@@ -133,3 +133,56 @@ The worker listens to the `published_events` Kafka topic. The payload is lightwe
   "published_at": 1716200000,
   "ml_importance_score": 0.85
 }
+```
+# Activity Tracking & The Fan-out Worker
+
+To ensure our system scales, the Fan-out Worker must only push pre-computed feeds to "Active" users. Querying a massive PostgreSQL database to find active users matching a specific category on every single article publication would instantly melt the database under the read load. 
+
+We decouple activity tracking from the primary relational database by utilizing an in-memory Redis cache.
+
+---
+
+## 1. The Core Concept: "Active Users by Category" Cache
+
+Instead of a SQL query, the Fan-out Worker queries a dedicated set of **Redis Sorted Sets (ZSETs)** that act as an in-memory index of currently active users, segmented by the categories they follow.
+
+*   **Key Pattern:** `active_subscribers:{category}` (e.g., `active_subscribers:technology`)
+*   **Score:** The Unix Timestamp of the user's last API interaction.
+*   **Value:** The `user_id`.
+
+---
+
+## 2. The "Activity Ping" (How it gets updated)
+
+We do not execute heavy writes on every user click. Activity tracking is handled asynchronously to protect the read path.
+
+1.  **The API Gateway:** Whenever a user interacts with the app (opens it, scrolls, clicks), the gateway validates their token and fires a lightweight, asynchronous "Activity Ping" event to a Kafka topic (e.g., `user_activity_logs`). 
+    *   *Note: Pings are typically debounced at the client or gateway level (e.g., maximum one ping per user, per hour) to prevent flooding.*
+2.  **The Activity Processor (Background Worker):** A lightweight consumer reads these pings.
+3.  **Updating the Cache:** The processor looks up the user's followed categories and updates their timestamp in the relevant Redis ZSETs.
+    *   **Command:** `ZADD active_subscribers:technology <current_unix_timestamp> <user_id>`
+    *   Because `ZADD` is an $O(\log(N))$ operation, it updates the timestamp instantly without creating duplicate entries.
+
+---
+
+## 3. The Fan-out Execution (How it gets read)
+
+When a new article is published and successfully clustered, the Fan-out Worker bypasses PostgreSQL entirely and goes straight to Redis.
+
+1.  **The Query:** The worker asks Redis for all users in the specific category bucket whose score (timestamp) is strictly greater than 7 days ago.
+    *   **Command:** `ZRANGEBYSCORE active_subscribers:technology <now_minus_7_days> +inf`
+2.  **The Result:** Redis instantly returns a list of `user_ids` representing exactly the active cohort that needs their feed updated.
+3.  **The Fan-out:** The worker takes this list, chunks it into batches of 1,000, and uses Redis Pipelining to push the new `Cluster_ID` into their individual `user_feed:{user_id}` ZSETs.
+
+---
+
+## 4. The Cleanup (Automatic Eviction)
+
+To prevent the `active_subscribers` lists from growing infinitely and consuming all our RAM, cleanup is built directly into the Fan-out Worker's routine.
+
+Immediately after the Fan-out Worker pulls the list of active users, it executes a cleanup command to drop anyone older than 7 days from the index:
+
+*   **Command:** `ZREMRANGEBYSCORE active_subscribers:technology -inf <now_minus_7_days>`
+
+### Summary of the Trade-off
+By moving "Activity State" out of PostgreSQL and into time-scored Redis ZSETs segmented by category, we trade a small amount of RAM and background processing for massive read performance. The Fan-out Worker can identify hundreds of thousands of target users for a specific category in milliseconds, completely shielding the relational database from the fan-out storm.
