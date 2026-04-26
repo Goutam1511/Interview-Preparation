@@ -117,3 +117,19 @@ Once Flink and the ML/Clustering engines have finalized the article metadata, th
     *   **HSET (`article_meta:{article_id}`):** Stores the display metadata (Title, Snippet, Image) with a 7-day TTL.
     *   **ZSET (`category_feed:{category}`):** If the article is the Head of a Cluster, its `Cluster_ID` is pushed into the category's sorted set, scored by timestamp.
     *   **Event Trigger:** Finally, Flink drops a small `Article_Published` event into a secondary Kafka topic. The **Fan-Out Worker** consumes this to push the `Cluster_ID` into the pre-computed Redis feeds of active users who follow that category.
+  
+## 7. The Fan-out Feed Generation Worker (Personalization Push)
+
+The Fan-out Worker bridges the gap between the ingestion pipeline and the user's lightning-fast read path. It is responsible for implementing the "Push" half of our Hybrid Push/Pull feed generation strategy. 
+
+When a breaking news story is successfully processed and clustered, we need to deliver it to the customized feeds of users who care about it, without overwhelming the system.
+
+### A. The Trigger
+The worker listens to the `published_events` Kafka topic. The payload is lightweight, containing only the routing necessities:
+```json
+{
+  "cluster_id": "cluster-999",
+  "category": "Technology",
+  "published_at": 1716200000,
+  "ml_importance_score": 0.85
+}
