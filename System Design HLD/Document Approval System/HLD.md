@@ -437,3 +437,127 @@ graph TD
     classDef alert fill:#ffcccb,stroke:#ff0000,stroke-width:2px;
     class DLQ alert;
 ```
+# Enterprise Component Deep Dive & Sequence Flows
+
+This document details the responsibilities of each component in the Enterprise High-Level Design (HLD) and maps out the exact sequence of interactions for the two most critical workflows: Customer File Upload and Internal Document Review.
+
+---
+
+## 1. Enterprise Component Deep Dive
+
+### **1.1. Edge & Entry Layer**
+*   **Customer & Auditor Portals (Frontend):** Single Page Applications (React/Vue) that communicate via REST APIs. The Customer Portal implements Server-Sent Events (SSE) to listen for real-time status updates without polling.
+*   **API Gateway / Load Balancer:** The unified entry point for all external traffic.
+    *   *Responsibilities:* SSL termination, JWT authentication & authorization (routing Auditors to internal endpoints and Customers to external ones), rate limiting (preventing DDoS), and holding long-lived SSE connections open for the frontend.
+
+### **1.2. Core Microservices**
+*   **Document Service:** The metadata manager.
+    *   *Responsibilities:* Validates file extensions/sizes, creates the initial DB records (`PENDING_UPLOAD`), and generates AWS S3 Presigned URLs. It acts as a strict guard so that massive 5GB+ file payloads never pass through our backend memory/network space.
+*   **Workflow & State Service:** The state machine of the application.
+    *   *Responsibilities:* Executes state transitions (`PENDING_UPLOAD` → `IN_REVIEW` → `APPROVED`/`REJECTED`). It acts as the bridge between standard HTTP requests and the Temporal workflow orchestrator.
+*   **Notification Service:** The outbound communication engine.
+    *   *Responsibilities:* Listens to the Message Broker for notification tasks. Formats email/SMS templates and integrates with SendGrid/Twilio. Implements exponential backoff retries and pushes failed messages to the Dead Letter Queue (DLQ).
+
+### **1.3. Async, Event, and Orchestration Layer**
+*   **Message Broker (Kafka / AWS SQS):** The asynchronous backbone.
+    *   *Responsibilities:* Decouples services. Captures events directly from S3 (Upload Completed) and passes them to the Workflow Service. Ensures reliable, at-least-once delivery of notification events.
+*   **Temporal Cluster (Orchestration Engine):** The enterprise replacement for cron jobs.
+    *   *Responsibilities:* Manages distributed, stateful workflows. When a document enters review, Temporal holds an exact timer in memory (`sleep(deadline - 24 hours)`). If the Temporal worker node crashes, the cluster seamlessly shifts the timer to another node, ensuring 100% SLA compliance without hammering the database with polling queries.
+
+### **1.4. Persistence Layer**
+*   **Primary Database (PostgreSQL):** Relational store for users, document metadata, and the append-only review audit log. Optimized with indexes on `customer_id` and `status`.
+*   **Object Storage (AWS S3):** Stores the actual file blobs. Configured with automated Lifecycle Policies (transition to Glacier after 30 days, delete after 90 days).
+
+---
+
+## 2. Sequence Diagrams
+
+### **Workflow A: Customer File Upload (With SSE & Temporal)**
+This flow demonstrates the Presigned URL pattern, Server-Sent Events (SSE) for real-time UI updates, and the initialization of the Temporal deadline timer.
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Customer
+    participant API as API Gateway
+    participant DocSvc as Document Service
+    participant S3 as AWS S3
+    participant Kafka as Message Broker
+    participant WF as Workflow Service
+    participant Temp as Temporal Cluster
+    participant DB as PostgreSQL
+
+    Customer->>API: POST /documents (file metadata)
+    API->>DocSvc: Validate & Route
+    DocSvc->>DB: Insert row (status: PENDING_UPLOAD)
+    DocSvc->>S3: Request Presigned URL
+    S3-->>DocSvc: Return URL
+    DocSvc-->>API: Return doc_id & Presigned URL
+    API-->>Customer: 201 Created (url + sse_endpoint)
+
+    par Setup SSE Stream
+        Customer->>API: GET /documents/{doc_id}/stream (SSE)
+        API->>WF: Register SSE connection
+        WF-->>Customer: Connection Keep-Alive
+    and Upload File
+        Customer->>S3: PUT /file (direct upload using URL)
+        S3-->>Customer: 200 OK (upload complete)
+    end
+
+    S3->>Kafka: Publish "ObjectCreated" Event
+    Kafka->>WF: Consume Upload Event
+    
+    WF->>DB: Update status to IN_REVIEW & set deadline
+    WF->>Temp: Start Workflow(doc_id, deadline)
+    Temp-->>Temp: sleep(deadline - 24hr)
+    
+    WF->>API: Push SSE Event (status: IN_REVIEW)
+    API-->>Customer: Real-time UI update!
+```
+### **Workflow B: Internal Audit Review (With SLA Cancellation)**
+This flow shows the auditor fetching their queue, submitting a review, cancelling the Temporal deadline timer, and reliably notifying the customer.
+
+``` mermaid
+sequenceDiagram
+    autonumber
+    actor Auditor
+    participant API as API Gateway
+    participant WF as Workflow Service
+    participant Temp as Temporal Cluster
+    participant DB as PostgreSQL
+    participant Kafka as Message Broker
+    participant Notif as Notification Service
+    participant DLQ as Dead Letter Queue
+    participant Cust as Customer (Email)
+
+    Auditor->>API: GET /internal/documents?status=IN_REVIEW
+    API->>WF: Route Request
+    WF->>DB: Query documents sorted by deadline
+    DB-->>WF: Return List
+    WF-->>API: Return Data
+    API-->>Auditor: Display review queue
+
+    Auditor->>API: POST /internal/documents/{doc_id}/reviews (APPROVED)
+    API->>WF: Route Review Payload
+    
+    WF->>DB: Begin DB Transaction
+    WF->>DB: Update document status to APPROVED
+    WF->>DB: Insert into reviews (Audit Log)
+    DB-->>WF: Commit Transaction
+
+    WF->>Temp: Signal: Cancel Deadline Timer!
+    Temp-->>Temp: Timer Destroyed (SLA met)
+
+    WF->>Kafka: Publish "ReviewCompleted" Event
+    WF-->>API: 200 OK
+    API-->>Auditor: Success UI update
+
+    Kafka->>Notif: Consume "ReviewCompleted" Event
+    
+    alt Email Provider Success
+        Notif->>Cust: Send "Document Approved" Email
+    else Email Provider Down (After Retries)
+        Notif->>Kafka: NACK / Retry Backoff
+        Kafka->>DLQ: Move to Dead Letter Queue
+        DLQ-->>Engineer: PagerDuty Alert (Manual Intervention)
+    end
+```
