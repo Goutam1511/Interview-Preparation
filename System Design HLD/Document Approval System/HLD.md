@@ -230,3 +230,89 @@ Submits the final decision on a document. This API is idempotent.
   }
 }
 ```
+
+
+# 5. Architecture Decisions & Trade-offs
+
+This section outlines the critical design choices made for the Document Lifecycle system, comparing alternative approaches and detailing the final decisions based on scalability and compliance requirements.
+
+---
+
+## Trade-off 1: Cron Scheduler vs. Distributed Workflow Orchestrator (Temporal)
+
+**Where it fits:** Deadline Scheduler and Workflow & State Service.
+
+### The Problem
+Documents have a strict "time to review" (SLA). We need a reliable mechanism to trigger an alert exactly 24 hours before the deadline expires.
+
+### Approach A: Cron Job + DB Polling (Simpler)
+* **Design**: A scheduled worker runs every 5 minutes and queries the Read Replica.
+    ```sql
+    SELECT id FROM documents 
+    WHERE deadline < NOW() + INTERVAL '24 HOURS' 
+    AND status = 'IN_REVIEW' 
+    AND deadline_notified = FALSE;
+    ```
+* **Pros**: Easy to build; utilizes standard infrastructure (Postgres, Cron).
+* **Cons**: Scaling issues with millions of rows; potential for missed windows if the job crashes; creates "thundering herd" spikes on the database every 5 minutes.
+
+### Approach B: Distributed Orchestrator (Temporal/Cadence)
+* **Design**: When a document enters `IN_REVIEW`, a stateful workflow starts. The logic uses a durable timer: `sleep(deadline - 24 hours); sendNotification();`.
+* **Pros**: Extremely scalable; handles millions of concurrent timers; implicit retries and state persistence.
+* **Cons**: High operational overhead to maintain a Temporal cluster.
+
+**Conclusion**: For a startup, **Approach A** is sufficient. For a massive enterprise like Rippling with strict compliance SLAs, **Approach B** is the standard and replaces the standalone Deadline Scheduler entirely.
+
+---
+
+## Trade-off 2: Client-side Polling vs. Server-Sent Events (SSE)
+
+**Where it fits**: Connection between the Customer Portal (Client) and API Gateway.
+
+### The Problem
+Since the client uploads massive files directly to S3, the browser needs a way to know when the backend has successfully processed the S3 event and updated the document status to `IN_REVIEW`.
+
+### Approach A: Client Polling
+* **Design**: The frontend calls `GET /api/v1/documents/{id}` every 3 seconds until the status changes.
+* **Pros**: Simplest to implement; stateless backend.
+* **Cons**: Wasteful network traffic; can overload the API Gateway and Database with redundant read requests.
+
+### Approach B: Server-Sent Events (SSE)
+* **Design**: The client establishes a one-way SSE connection. When the Workflow Service processes the Kafka event from S3, it pushes the update directly to the client.
+* **Pros**: Immediate updates; superior UX; significantly lower API and DB load.
+* **Cons**: Requires persistent connections; slightly more complex load balancing.
+
+**Conclusion**: **Use SSE**. It is perfectly suited for one-way server-to-client notifications (unlike the overhead of bi-directional WebSockets) and drastically reduces system-wide load.
+
+---
+
+## Trade-off 3: Ensuring Fault Tolerance with Dead Letter Queues (DLQs)
+
+**Where it fits**: Between the Message Broker (Kafka/SQS) and the Notification Service.
+
+### The Problem
+If a 3rd-party provider (e.g., SendGrid) is down, we cannot afford to lose critical approval or rejection notifications.
+
+### Implementation Strategy: At-Least-Once Delivery
+1.  The **Notification Service** consumes a message from the broker.
+2.  If the email fails to send, the message is **not** acknowledged.
+3.  The broker retries with **exponential backoff** (e.g., 1m, 5m, 15m).
+4.  After 5 failed attempts, the message is moved to a **Dead Letter Queue (DLQ)**.
+5.  **Engineering Alerts**: DLQ activity triggers a PagerDuty alert for manual intervention to ensure no notification is lost.
+
+---
+
+## Trade-off 4: Data Deletion Strategy (Soft vs. Hard Deletes)
+
+**Where it fits**: Primary Database and Object Storage (S3).
+
+### The Problem
+Handling "Cancel Review" requests or document rejections in a way that balances user privacy with regulatory compliance.
+
+### Implementation Strategy
+In the HR and Compliance domain, immediate hard deletion is risky due to accidental clicks and the necessity of audit trails.
+
+* **Database (PostgreSQL)**: We use **Soft Deletes**. Rows are updated to `status = 'CANCELED'` with a timestamp. This preserves the audit trail for compliance teams.
+* **Object Storage (S3)**: We utilize **S3 Lifecycle Policies**.
+    * **30 Days**: Move canceled/rejected files to a cheaper tier (**S3 Glacier**).
+    * **90 Days**: Permanently **Hard-Delete** the files to remain compliant with GDPR/CCPA "Right to Erasure" regulations.
