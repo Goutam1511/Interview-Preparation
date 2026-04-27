@@ -236,7 +236,7 @@ We use **PostgreSQL** as our primary relational database to ensure strict ACID t
 
 ---
 
-### 5.1. Table: `users`
+### 4.1. Table: `users`
 Stores information for both Customers and Auditors.
 
 | Column | Type | Constraints |
@@ -247,7 +247,7 @@ Stores information for both Customers and Auditors.
 
 ---
 
-### 5.2. Table: `documents`
+### 4.2. Table: `documents`
 The central table for tracking document metadata and lifecycle state.
 
 | Column | Type | Constraints | Notes |
@@ -264,7 +264,7 @@ The central table for tracking document metadata and lifecycle state.
 
 ---
 
-### 5.3. Table: `reviews` (Audit Trail)
+### 4.3. Table: `reviews` (Audit Trail)
 Acts as an **append-only** audit log for compliance and historical tracking.
 
 | Column | Type | Constraints |
@@ -360,3 +360,80 @@ In the HR and Compliance domain, immediate hard deletion is risky due to acciden
 * **Object Storage (S3)**: We utilize **S3 Lifecycle Policies**.
     * **30 Days**: Move canceled/rejected files to a cheaper tier (**S3 Glacier**).
     * **90 Days**: Permanently **Hard-Delete** the files to remain compliant with GDPR/CCPA "Right to Erasure" regulations.
+
+## 6. The Evolution: MVP to Enterprise Scale
+
+In a standard startup environment, we would deploy a Minimum Viable Product (MVP) architecture. However, at Rippling's enterprise scale (millions of documents, strict compliance SLAs, massive traffic spikes), the MVP architecture introduces critical bottlenecks. Here is a deep dive into the MVP components and exactly *how* and *why* we are upgrading them.
+
+### A. Deadline Tracking
+*   **MVP Component (Cron Scheduler):** A standard cron job runs every 5 minutes, querying a Postgres Read Replica to find documents where `deadline < NOW() + 24hr`.
+*   **The Bottleneck:** As the table grows to millions of rows, polling creates "thundering herd" spikes of database load and expensive table scans. If the cron worker crashes, SLAs are missed.
+*   **Enterprise Upgrade (Temporal / Cadence):** We replace the Cron Scheduler entirely with a distributed workflow orchestrator like **Temporal**. When a document enters `IN_REVIEW`, Temporal starts a stateful workflow holding a timer in memory (`sleep(deadline - 24 hours)`). This removes all DB polling and guarantees execution at exact milliseconds across a distributed cluster.
+
+### B. Client Real-Time Updates
+*   **MVP Component (Client Polling):** After a customer uploads a large file directly to S3, their browser calls `GET /documents/{id}` every 3 seconds to check if the backend has registered the file.
+*   **The Bottleneck:** This generates massive, wasteful network traffic and overloads the API Gateway and Database with useless reads.
+*   **Enterprise Upgrade (Server-Sent Events - SSE):** We upgrade to a push-model. The client establishes a one-way persistent **SSE connection** during upload. When the backend processes the S3 upload event, it pushes the state change down the open pipeline, providing instant UX with minimal server overhead.
+
+### C. Fault Tolerance & Delivery Guarantees
+*   **MVP Component (Basic Message Broker):** A standard queue passes events to the Notification Service to send emails via SendGrid/SES.
+*   **The Bottleneck:** If the 3rd-party email provider has an outage, the message fails, is discarded, and the customer is never notified of their approval/rejection.
+*   **Enterprise Upgrade (Dead Letter Queues - DLQ):** We implement At-Least-Once delivery. If an email fails, the broker retries with exponential backoff. If it fails repeatedly, it moves to a **DLQ**. This triggers an automated PagerDuty alert to Engineering to manually intervene. No notification is ever lost.
+
+### D. Data Deletion & Compliance
+*   **MVP Component (Hard Deletes):** When a user cancels a review, the application issues a `DELETE` SQL statement and immediately deletes the S3 object.
+*   **The Bottleneck:** In the HR domain, accidental hard-deletions destroy critical audit trails and violate compliance norms.
+*   **Enterprise Upgrade (Soft Deletes + S3 Lifecycle Policies):** The DB uses soft deletes (`status = 'CANCELED'`). We rely entirely on AWS S3 Lifecycle Policies to automatically transition canceled/rejected files to Glacier (cold storage) after 30 days, and hard-delete them after 90 days for GDPR/CCPA compliance.
+
+---
+
+## 7. Enterprise Architecture Diagram
+
+*This diagram reflects the upgraded enterprise state, featuring Temporal orchestration, SSE push connections, and Dead Letter Queues.*
+```mermaid
+graph TD
+    subgraph Clients
+        Cust[Customer Portal]
+        Aud[Internal Audit Portal]
+    end
+
+    APIG[API Gateway / Load Balancer]
+
+    Cust -->|HTTPS Request| APIG
+    Aud -->|HTTPS Request| APIG
+    Cust -.->|SSE Push Connection| APIG
+
+    subgraph Core Services
+        DS[Document Service]
+        WS[Workflow Service / Temporal Worker]
+        NS[Notification Service]
+        Temp[Temporal Cluster]
+    end
+
+    APIG --> DS
+    APIG --> WS
+
+    %% Upload Flow
+    Cust -.->|Direct Upload via Presigned URL| S3[(Object Storage - AWS S3)]
+    DS -->|Generates URL| S3
+    S3 -->|S3 Event trigger| MQ[Message Broker - Kafka/SQS]
+    MQ -->|Upload Complete Event| WS
+
+    %% Temporal & State
+    WS <-->|Orchestrates Timers/Deadlines| Temp
+    WS --> PrimaryDB[(PostgreSQL - Primary)]
+    DS --> PrimaryDB
+
+    %% Async & Fault Tolerance
+    WS -->|Notification Events| MQ
+    MQ --> NS
+    MQ -.->|Failure Backoff| DLQ[Dead Letter Queue]
+    DLQ -.->|Alerts| Eng[Engineering / PagerDuty]
+
+    NS --> Ext[Email / SMS / Push]
+
+    classDef service fill:#f9f,stroke:#333,stroke-width:2px;
+    class DS,WS,NS,Temp service;
+    classDef alert fill:#ffcccb,stroke:#ff0000,stroke-width:2px;
+    class DLQ alert;
+```
