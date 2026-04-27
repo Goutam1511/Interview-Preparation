@@ -230,22 +230,66 @@ Submits the final decision on a document. This API is idempotent.
   }
 }
 ```
+## 4. Persistence & Data Model
 
+We use **PostgreSQL** as our primary relational database to ensure strict ACID transactions and maintain relational integrity between Users, Documents, and Review events.
 
-# 5. Architecture Decisions & Trade-offs
+---
+
+### 5.1. Table: `users`
+Stores information for both Customers and Auditors.
+
+| Column | Type | Constraints |
+| :--- | :--- | :--- |
+| `id` | UUID | Primary Key |
+| `email` | VARCHAR | Unique, Not Null |
+| `role` | VARCHAR | ENUM ('CUSTOMER', 'AUDITOR') |
+
+---
+
+### 5.2. Table: `documents`
+The central table for tracking document metadata and lifecycle state.
+
+| Column | Type | Constraints | Notes |
+| :--- | :--- | :--- | :--- |
+| `id` | UUID | Primary Key | |
+| `customer_id` | UUID | Foreign Key | Indexed for fast lookups by user. |
+| `document_type` | VARCHAR | Not Null | e.g., 'PASSPORT', 'W4' |
+| `s3_bucket_key` | VARCHAR | Not Null | Path to the actual file blob in S3. |
+| `status` | VARCHAR | ENUM | PENDING_UPLOAD, IN_REVIEW, APPROVED, REJECTED, CANCELED |
+| `created_at` | TIMESTAMP | DEFAULT NOW() | |
+| `updated_at` | TIMESTAMP | DEFAULT NOW() | |
+| `deadline_at` | TIMESTAMP | | Indexed with `status` for deadline tracking. |
+| `deadline_notified`| BOOLEAN | DEFAULT FALSE | Prevents duplicate alerts for the same deadline. |
+
+---
+
+### 5.3. Table: `reviews` (Audit Trail)
+Acts as an **append-only** audit log for compliance and historical tracking.
+
+| Column | Type | Constraints |
+| :--- | :--- | :--- |
+| `id` | UUID | Primary Key |
+| `document_id` | UUID | Foreign Key |
+| `auditor_id` | UUID | Foreign Key |
+| `outcome` | VARCHAR | ENUM ('APPROVED', 'REJECTED') |
+| `comments` | TEXT | |
+| `created_at` | TIMESTAMP | DEFAULT NOW() |
+
+## 5. Architecture Decisions & Trade-offs
 
 This section outlines the critical design choices made for the Document Lifecycle system, comparing alternative approaches and detailing the final decisions based on scalability and compliance requirements.
 
 ---
 
-## Trade-off 1: Cron Scheduler vs. Distributed Workflow Orchestrator (Temporal)
+### Trade-off 1: Cron Scheduler vs. Distributed Workflow Orchestrator (Temporal)
 
 **Where it fits:** Deadline Scheduler and Workflow & State Service.
 
-### The Problem
+#### The Problem
 Documents have a strict "time to review" (SLA). We need a reliable mechanism to trigger an alert exactly 24 hours before the deadline expires.
 
-### Approach A: Cron Job + DB Polling (Simpler)
+#### Approach A: Cron Job + DB Polling (Simpler)
 * **Design**: A scheduled worker runs every 5 minutes and queries the Read Replica.
     ```sql
     SELECT id FROM documents 
@@ -256,7 +300,7 @@ Documents have a strict "time to review" (SLA). We need a reliable mechanism to 
 * **Pros**: Easy to build; utilizes standard infrastructure (Postgres, Cron).
 * **Cons**: Scaling issues with millions of rows; potential for missed windows if the job crashes; creates "thundering herd" spikes on the database every 5 minutes.
 
-### Approach B: Distributed Orchestrator (Temporal/Cadence)
+#### Approach B: Distributed Orchestrator (Temporal/Cadence)
 * **Design**: When a document enters `IN_REVIEW`, a stateful workflow starts. The logic uses a durable timer: `sleep(deadline - 24 hours); sendNotification();`.
 * **Pros**: Extremely scalable; handles millions of concurrent timers; implicit retries and state persistence.
 * **Cons**: High operational overhead to maintain a Temporal cluster.
@@ -265,19 +309,19 @@ Documents have a strict "time to review" (SLA). We need a reliable mechanism to 
 
 ---
 
-## Trade-off 2: Client-side Polling vs. Server-Sent Events (SSE)
+### Trade-off 2: Client-side Polling vs. Server-Sent Events (SSE)
 
 **Where it fits**: Connection between the Customer Portal (Client) and API Gateway.
 
-### The Problem
+#### The Problem
 Since the client uploads massive files directly to S3, the browser needs a way to know when the backend has successfully processed the S3 event and updated the document status to `IN_REVIEW`.
 
-### Approach A: Client Polling
+#### Approach A: Client Polling
 * **Design**: The frontend calls `GET /api/v1/documents/{id}` every 3 seconds until the status changes.
 * **Pros**: Simplest to implement; stateless backend.
 * **Cons**: Wasteful network traffic; can overload the API Gateway and Database with redundant read requests.
 
-### Approach B: Server-Sent Events (SSE)
+#### Approach B: Server-Sent Events (SSE)
 * **Design**: The client establishes a one-way SSE connection. When the Workflow Service processes the Kafka event from S3, it pushes the update directly to the client.
 * **Pros**: Immediate updates; superior UX; significantly lower API and DB load.
 * **Cons**: Requires persistent connections; slightly more complex load balancing.
@@ -286,14 +330,14 @@ Since the client uploads massive files directly to S3, the browser needs a way t
 
 ---
 
-## Trade-off 3: Ensuring Fault Tolerance with Dead Letter Queues (DLQs)
+### Trade-off 3: Ensuring Fault Tolerance with Dead Letter Queues (DLQs)
 
 **Where it fits**: Between the Message Broker (Kafka/SQS) and the Notification Service.
 
-### The Problem
+#### The Problem
 If a 3rd-party provider (e.g., SendGrid) is down, we cannot afford to lose critical approval or rejection notifications.
 
-### Implementation Strategy: At-Least-Once Delivery
+#### Implementation Strategy: At-Least-Once Delivery
 1.  The **Notification Service** consumes a message from the broker.
 2.  If the email fails to send, the message is **not** acknowledged.
 3.  The broker retries with **exponential backoff** (e.g., 1m, 5m, 15m).
@@ -302,14 +346,14 @@ If a 3rd-party provider (e.g., SendGrid) is down, we cannot afford to lose criti
 
 ---
 
-## Trade-off 4: Data Deletion Strategy (Soft vs. Hard Deletes)
+### Trade-off 4: Data Deletion Strategy (Soft vs. Hard Deletes)
 
 **Where it fits**: Primary Database and Object Storage (S3).
 
-### The Problem
+#### The Problem
 Handling "Cancel Review" requests or document rejections in a way that balances user privacy with regulatory compliance.
 
-### Implementation Strategy
+#### Implementation Strategy
 In the HR and Compliance domain, immediate hard deletion is risky due to accidental clicks and the necessity of audit trails.
 
 * **Database (PostgreSQL)**: We use **Soft Deletes**. Rows are updated to `status = 'CANCELED'` with a timestamp. This preserves the audit trail for compliance teams.
