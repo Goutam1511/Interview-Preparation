@@ -517,64 +517,178 @@ When a room is booked on an external aggregator (e.g., Agoda), they fire a webho
 
 ## 7. Sequence Diagrams / CUJ
 
-### **Search and Booking Journey**
+## 6. Sequence Diagrams & User Journeys
+
+The following user journeys illustrate the orchestration between the microservices. A key distinction in this updated architecture is the delegation of all inventory-related operations (both caching and persistence) exclusively to the **Inventory Service**.
+
+### 6.1. Search and Booking Journey
+
+This journey covers the critical path from a user searching for a hotel to successfully confirming a reservation. It highlights the temporary locking mechanism to prevent double-booking during the checkout phase.
+
+**Step-by-Step Flow:**
+1.  **Search:** The client sends a search request with dates and location to the API Gateway, which routes it to the Search Service.
+2.  **Read Availability:** The Search Service queries ElasticSearch for matching properties and Redis for real-time room availability, returning the merged results.
+3.  **Initiate Booking:** The user selects a room and initiates a booking. The API Gateway forwards the request (with an Idempotency Key) to the Booking Service.
+4.  **Temporary Hold (Locking):** The Booking Service calls the Inventory Service to place a temporary hold. The Inventory Service creates a TTL-based lock in Redis. If the room is already locked by someone else, it returns a "Sold Out" error.
+5.  **Payment Processing:** If the hold is successful, the Booking Service returns a payment gateway URL. The user completes the transaction.
+6.  **Commit Inventory:** Upon receiving a successful payment webhook, the Booking Service instructs the Inventory Service to permanently deduct the room. The Inventory Service initiates a database transaction with a pessimistic lock (`SELECT FOR UPDATE`), decrements the available count, and commits.
+7.  **Sync & Notify:** The Booking Service confirms the booking to the user and asynchronously publishes an event to the Channel Manager to update external aggregators.
+
 ```mermaid
 sequenceDiagram
+    autonumber
     participant User
     participant Gateway as API Gateway
     participant Search as Search Service
     participant Booking as Booking Service
+    participant Inventory as Inventory Service
+    participant Redis as Redis (Cache/Locks)
     participant InvDB as Inventory DB (Postgres)
     participant Channel as Channel Manager
 
     User->>Gateway: GET /search?location=blr&dates...
     Gateway->>Search: Fetch available hotels
-    Search-->>User: Return List & Prices
+    Search->>Redis: Get real-time availability counts
+    Search-->>Gateway: Return List & Prices
+    Gateway-->>User: Display Results
     
     User->>Gateway: POST /reservations
     Gateway->>Booking: Init Reservation (Idempotency Key)
     
-    Booking->>InvDB: BEGIN Transaction
-    Booking->>InvDB: SELECT available_rooms FOR UPDATE
-    alt Rooms Available
-        Booking->>InvDB: UPDATE available_rooms = available_rooms - 1
-        Booking->>InvDB: COMMIT
-        Booking-->>User: Return Reservation (Status: PENDING_PAYMENT)
+    %% The Hold Phase
+    Booking->>Inventory: Request Temporary Hold
+    Inventory->>Redis: SET lock:inventory:id EX 600 NX
+    alt Room Available (Lock Acquired)
+        Redis-->>Inventory: Lock Success
+        Inventory-->>Booking: Hold Confirmed
+        Booking-->>User: Return Payment Link (Status: PENDING)
         
         User->>Gateway: Complete Payment
         Gateway->>Booking: Webhook: Payment Success
-        Booking->>InvDB: Update Reservation (Status: CONFIRMED)
-        Booking-->>User: Booking Confirmed!
         
-        Booking->>Channel: Async: Push inventory update
-        Channel->>External OTAs: Sync Availability
-    else Sold Out
-        Booking->>InvDB: ROLLBACK
+        %% The Commit Phase
+        Booking->>Inventory: Confirm Booking & Commit
+        Inventory->>InvDB: BEGIN Transaction
+        Inventory->>InvDB: SELECT available_rooms FOR UPDATE
+        Inventory->>InvDB: UPDATE available_rooms = available_rooms - 1
+        Inventory->>InvDB: COMMIT
+        Inventory->>Redis: HINCRBY inv:counts -1 (Update Cache)
+        Inventory-->>Booking: Inventory Committed
+        
+        Booking-->>User: Booking Confirmed!
+        Booking-)Channel: Async: Push inventory reduction
+        Channel-)External OTAs: Sync Availability (-1)
+    else Room Unavailable
+        Redis-->>Inventory: Lock Failed
+        Inventory-->>Booking: Error: Room Sold Out
         Booking-->>User: Error: Rooms no longer available
     end
 ```
 
-### **Cancellation Journey**
+### 6.2. Cancellation Journey
+This journey handles the reversal of a booking. It must ensure that inventory is immediately made available for other users to book and that refunds are triggered correctly.
+
+**Step-by-Step Flow:**
+
+1. **Initiate Cancellation:** The user requests to cancel their confirmed reservation.
+2. **Process Cancellation:** The Booking Service updates the reservation state to CANCELLED in its own domain.
+3. **Release Inventory:** The Booking Service synchronously calls the Inventory Service to release the rooms.
+4. **Database & Cache Update:** The Inventory Service increments the available_rooms count in PostgreSQL and immediately updates the Redis search cache to reflect the freed capacity.
+5. **Refund & Sync:** The Booking Service initiates a refund through the payment gateway and asynchronously notifies the Channel Manager to push the availability increase to external OTAs.
+
 ```mermaid
 sequenceDiagram
+    autonumber
     participant User
     participant Gateway as API Gateway
     participant Booking as Booking Service
-    participant InvDB as Inventory DB
+    participant Inventory as Inventory Service
+    participant Redis as Redis (Cache)
+    participant InvDB as Inventory DB (Postgres)
     participant Channel as Channel Manager
 
     User->>Gateway: DELETE /reservations/{id}
-    Gateway->>Booking: Process Cancellation
+    Gateway->>Booking: Process Cancellation Request
     
-    Booking->>InvDB: BEGIN Transaction
-    Booking->>InvDB: Update Reservation (Status: CANCELLED)
-    Booking->>InvDB: UPDATE available_rooms = available_rooms + 1
-    Booking->>InvDB: COMMIT
+    %% State Update
+    Booking->>Booking: Update Reservation Status = CANCELLED
+    
+    %% Release Phase
+    Booking->>Inventory: Release Inventory
+    Inventory->>InvDB: BEGIN Transaction
+    Inventory->>InvDB: UPDATE available_rooms = available_rooms + 1
+    Inventory->>InvDB: COMMIT
+    
+    Inventory->>Redis: HINCRBY inv:counts +1 (Update Cache)
+    Inventory-->>Booking: Inventory Released
     
     Booking-->>User: Cancellation Success (Refund Initiated)
     
-    Booking->>Channel: Async: Push inventory update (+1)
-    Channel->>External OTAs: Sync Availability
+    Booking-)Channel: Async: Push inventory addition
+    Channel-)External OTAs: Sync Availability (+1)
+```
+### 6.3. Modify Reservation Journey
+Modifying a reservation (e.g., changing dates or upgrading a room) is the most complex transaction. The system must secure the new inventory before releasing the old inventory to ensure the user is not left without a room if the new dates are sold out.
+
+**Step-by-Step Flow:**
+
+1. **Request Modification:** The user requests to change their check-in dates or room type.
+2. **Hold New Inventory:** The Booking Service asks the Inventory Service to place a temporary Redis lock on the new requested dates/rooms.
+3. **Availability Check:** If the new inventory is unavailable, the modification aborts, and the original booking remains intact.
+4. **Fare Recalculation:** If the hold succeeds, the Booking Service calculates the price difference. It prompts the user to pay the difference (if the new room is more expensive) or initiates a partial refund (if it is cheaper).
+5. **Swap Inventory (Commit & Release):** Upon payment success, the Booking Service calls the Inventory Service to perform an atomic swap. The Inventory Service commits the deduction for the new dates and increments the availability for the old dates in PostgreSQL.
+6. **Sync Channel Manager:** The Channel Manager is notified of both the addition (old dates) and the deduction (new dates) to sync with external OTAs.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant User
+    participant Gateway as API Gateway
+    participant Booking as Booking Service
+    participant Inventory as Inventory Service
+    participant Redis as Redis (Cache/Locks)
+    participant InvDB as Inventory DB (Postgres)
+    participant Channel as Channel Manager
+
+    User->>Gateway: PATCH /reservations/{id} (New Dates/Rooms)
+    Gateway->>Booking: Process Modification
+    
+    %% Hold New Inventory First
+    Booking->>Inventory: Request Hold for NEW Dates
+    Inventory->>Redis: SET lock:new_inventory EX 600 NX
+    
+    alt New Inventory Available
+        Redis-->>Inventory: Lock Success
+        Inventory-->>Booking: New Hold Confirmed
+        
+        Booking->>Booking: Calculate Fare Difference
+        Booking-->>User: Return Modification Quote (Payment Required)
+        
+        User->>Gateway: Pay Fare Difference (e.g., ₹2000)
+        Gateway->>Booking: Webhook: Payment Success
+        
+        %% Swap Phase (Commit New, Release Old)
+        Booking->>Inventory: Swap Inventory (Commit New, Release Old)
+        Inventory->>InvDB: BEGIN Transaction
+        Inventory->>InvDB: SELECT FOR UPDATE (Old & New Rows)
+        Inventory->>InvDB: UPDATE available_rooms = available_rooms - 1 (NEW Dates)
+        Inventory->>InvDB: UPDATE available_rooms = available_rooms + 1 (OLD Dates)
+        Inventory->>InvDB: COMMIT
+        
+        Inventory->>Redis: Update Cache (-1 New, +1 Old)
+        Inventory-->>Booking: Swap Successful
+        
+        Booking->>Booking: Update Reservation Record
+        Booking-->>User: Modification Confirmed!
+        
+        Booking-)Channel: Async: Sync Both Updates
+        Channel-)External OTAs: Sync Availability (+1 Old, -1 New)
+        
+    else New Inventory Unavailable
+        Redis-->>Inventory: Lock Failed
+        Inventory-->>Booking: Error: New Dates Sold Out
+        Booking-->>User: Error: Cannot modify, desired dates unavailable
+    end
 ```
 ---
 
