@@ -17,7 +17,7 @@
 **Out Of Scope**
 1. Reading/Rendering files that don't support web view
 2. Fine-grained authorization for Auditors in internal review
-3. Reviewer lifecycle management
+3. Reviewer and user lifecycle management
 
 ### MVP Architecture Diagram
 ```mermaid
