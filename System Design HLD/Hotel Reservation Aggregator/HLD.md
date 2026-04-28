@@ -247,11 +247,11 @@ ElasticSearch powers the read-heavy discovery phase, handling complex text searc
 
 ** Dynamic Data (Availability):** Not stored in ElasticSearch. The Search Service queries ElasticSearch for matching properties, then performs a real-time cross-check against Redis to filter out sold-out hotels before returning the final payload to the user.
 
-## 4. API Specifications (REST)
+## 5. API Specifications (REST)
 
 The system exposes RESTful APIs for clients (Web/Mobile) and webhooks for external integrations. All endpoints assume a base URL of `https://api.domain.com` and require standard JWT-based authorization (except for public search).
 
-### 4.1. Search Hotels (Public)
+### 5.1. Search Hotels (Public)
 Fetches available hotels based on location, dates, and occupancy. Merges static data from ElasticSearch with real-time availability from Redis.
 
 **Endpoint:** `GET /api/v1/hotels/search`
@@ -293,7 +293,7 @@ Fetches available hotels based on location, dates, and occupancy. Merges static 
   ]
 }
 ```
-### 4.2. Create Reservation (Protected)
+### 5.2. Create Reservation (Protected)
 Initiates a new booking. Holds the inventory temporarily using Redis distributed locks while awaiting payment confirmation.
 
 **Endpoint:** `POST /api/v1/reservations`
@@ -334,7 +334,7 @@ Initiates a new booking. Holds the inventory temporarily using Redis distributed
   "payment_gateway_url": "[https://checkout.razorpay.com/pay/xyz123](https://checkout.razorpay.com/pay/xyz123)"
 }
 ```
-### 4.3. Modify Reservation (Protected)
+### 5.3. Modify Reservation (Protected)
 Allows users to change dates or add/remove rooms. Involves complex fare recalculation and inventory availability checks.
 
 **Endpoint:** `PATCH /api/v1/reservations/{reservation_id}`
@@ -363,7 +363,7 @@ Allows users to change dates or add/remove rooms. Involves complex fare recalcul
   "payment_gateway_url": "[https://checkout.razorpay.com/pay/abc987](https://checkout.razorpay.com/pay/abc987)"
 }
 ```
-### 4.4. Cancel Reservation (Protected)
+### 5.4. Cancel Reservation (Protected)
 Cancels a booking, frees up PostgreSQL inventory, invalidates Redis cache, and triggers async refunds.
 
 **Endpoint:** `DELETE /api/v1/reservations/{reservation_id}`
@@ -382,7 +382,7 @@ Cancels a booking, frees up PostgreSQL inventory, invalidates Redis cache, and t
   }
 }
 ```
-### 4.5. Channel Manager Webhook (Internal/B2B)
+### 5.5. Channel Manager Webhook (Internal/B2B)
 Endpoint for external Online Travel Agencies (like MakeMyTrip, Agoda) to notify our system when they sell one of our rooms, ensuring our central DB stays updated.
 
 **Endpoint:** `POST /api/v1/webhooks/channel-manager/inventory`
@@ -406,6 +406,114 @@ Endpoint for external Online Travel Agencies (like MakeMyTrip, Agoda) to notify 
 ```
 **Response: `202 Accepted`
 (The system accepts the payload and processes the inventory deduction asynchronously).
+
+## 6. Caching & Concurrency Handling (Deep Dive)
+
+Handling highly concurrent read/write operations is the most complex engineering challenge in a Hotel Aggregator. During peak travel seasons (e.g., long holiday weekends), a single popular property might receive thousands of concurrent search queries and dozens of simultaneous booking attempts for the last remaining room. 
+
+This section details how the system achieves **High Availability (Eventual Consistency) for Reads** and **Strict Consistency (ACID) for Writes**.
+
+### 6.1. Concurrency Control: Preventing Double-Bookings
+
+The system employs a multi-layered defense mechanism to absolutely guarantee that a room is never double-booked, even when external aggregators and direct users compete for the same inventory.
+
+#### Layer 1: Distributed Locking (The "Hold" Phase)
+When a user selects a room and proceeds to the checkout/payment page, the system must temporarily reserve that room so it isn't sold to someone else while the user is entering their credit card details.
+
+*   **Mechanism:** Redis Distributed Locks.
+*   **Execution:** The Booking Service attempts to set a lock with a Time-To-Live (TTL).
+    ```redis
+    // Attempt to acquire a lock for a specific room type on a specific date
+    SET lock:inventory:{hotel_id}:{room_type_id}:{date}:{user_id} "locked" EX 600 NX
+    ```
+*   **Outcome:** 
+    *   `EX 600` ensures the lock automatically drops after 10 minutes (600 seconds) if the payment fails or the user abandons the session.
+    *   If successful, the Search Cache is temporarily decremented so the room appears "Sold Out" to other searching users.
+
+#### Layer 2: Pessimistic Database Locking (The "Commit" Phase)
+Once the Payment Service confirms a successful transaction via webhook, the Booking Service must permanently deduct the inventory in the PostgreSQL database.
+
+*   **Mechanism:** Row-level locking via `SELECT ... FOR UPDATE`.
+*   **Execution:** 
+    ```sql
+    BEGIN;
+    -- Locks the specific row. Other concurrent transactions must wait.
+    SELECT available_rooms FROM room_inventory 
+    WHERE hotel_id = 'h-123' AND room_type_id = 'rt-456' AND date = '2026-05-10' 
+    FOR UPDATE;
+    
+    -- Application checks if available_rooms >= requested_rooms
+    
+    UPDATE room_inventory 
+    SET available_rooms = available_rooms - 1 
+    WHERE hotel_id = 'h-123' AND room_type_id = 'rt-456' AND date = '2026-05-10';
+    COMMIT;
+    ```
+*   **Why not Optimistic Locking?** Optimistic locking (using a `version` column) causes high transaction failure rates during peak contention, forcing the application to retry heavily. Pessimistic locking gracefully queues the operations at the database level, which is safer for high-contention financial transactions.
+
+#### Layer 3: Database Constraints (The Failsafe)
+As a final safety net against application-level bugs, the PostgreSQL schema enforces a strict constraint.
+*   **Mechanism:** `CHECK (available_rooms >= 0)`.
+*   If a race condition somehow bypasses the application locks, the database will violently reject the transaction rather than allowing negative inventory.
+
+---
+
+### 6.2. Caching Strategy: Handling Massive Read Volumes
+
+Search traffic typically outpaces booking traffic by a ratio of 1000:1. Querying PostgreSQL for every search would instantly overwhelm the database. 
+
+#### The Search Architecture (Read Path)
+1.  **ElasticSearch** filters hotels based on location, amenities, and static metadata.
+2.  **Redis** holds the real-time availability and dynamic pricing.
+3.  The **Search Service** intersects the two in memory.
+
+#### Redis Data Structures
+We use Redis Hashes to store daily inventory for lightning-fast `O(1)` lookups.
+
+*   **Key Pattern:** `inv:{hotel_id}:{date}`
+*   **Structure:**
+    ```json
+    // HGETALL inv:h-9876-abcd:2026-05-10
+    {
+      "rt-1234-xyz": "3", // Deluxe Room: 3 available
+      "rt-5678-abc": "0"  // Standard Room: Sold out
+    }
+    ```
+
+#### Cache Invalidation Strategy (Write-Through)
+To keep the search results as accurate as possible, the cache is updated synchronously during the booking workflow.
+
+1.  **On Payment Success:** The Booking Service updates PostgreSQL.
+2.  Within the same application workflow, it issues a Redis command: `HINCRBY inv:h-9876-abcd:2026-05-10 rt-1234-xyz -1`.
+3.  **Handling Drift:** Since Redis and Postgres are separate systems, network partitions can cause them to drift. A background Cron Job / Kubernetes CronJob runs every 5 minutes, querying PostgreSQL for all changes in the last 5 minutes and forcefully overwriting the Redis Hash to self-heal any discrepancies.
+
+#### Stale Reads vs. Strict Writes
+*   **Search is Eventually Consistent:** A user might see "1 Room Left" on the search page, but upon clicking "Book", they are told it is sold out. This is acceptable in the travel industry (and encourages urgency).
+*   **Booking is Strictly Consistent:** A user will *never* be successfully charged for a room that does not exist.
+
+---
+
+### 6.3. API Idempotency: Handling Network Failures
+
+Mobile networks can be spotty. If a user's app sends a `POST /reservations` request, the server processes it, but the response drops due to a network tunnel, the app might automatically retry the request. Without idempotency, the user would be charged twice and book two rooms.
+
+1.  **The Key:** The client generates a unique UUID (e.g., `Idempotency-Key: req-888-abc`) and attaches it to the header of any state-mutating request.
+2.  **The Cache:** Before processing, the API Gateway/Booking Service checks Redis for this key.
+    *   If `NOT EXISTS`: Process the booking. Once done, store the exact HTTP response body and status code in Redis against this key with a 24-hour TTL.
+    *   If `EXISTS`: Do not touch the database. Immediately return the cached HTTP response.
+3.  **Result:** Safe retries. The user gets their confirmation screen without triggering a duplicate database transaction.
+
+---
+
+### 6.4. Handling B2B Concurrency (Channel Manager)
+
+When a room is booked on an external aggregator (e.g., Agoda), they fire a webhook to our Channel Manager. 
+
+1.  **Queueing:** The webhook is immediately placed onto a highly available Kafka topic (`external-bookings-topic`) and returns `202 Accepted` to the OTA to prevent timeout.
+2.  **Processing:** Dedicated consumer workers read from Kafka and attempt the standard **Layer 2 (Pessimistic DB Lock)** workflow.
+3.  **Conflict Resolution:** If our system booked the exact same room a millisecond earlier and `available_rooms` is now `0`, the PostgreSQL transaction fails. The worker catches this exception and triggers an automated "Rejection/Refund Webhook" back to the external OTA, informing them the booking failed on our end due to out-of-sync inventory.
+
+---
 
 ## 7. Sequence Diagrams / CUJ
 
@@ -468,3 +576,65 @@ sequenceDiagram
     Booking->>Channel: Async: Push inventory update (+1)
     Channel->>External OTAs: Sync Availability
 ```
+---
+
+## 8. 
+
+## 9. Architecture Trade-offs & Decisions
+
+Here are the deliberate trade-offs made in this architecture:
+
+### 9.1. Pessimistic vs. Optimistic Locking
+*   **Decision:** Chose **Pessimistic Locking** (`SELECT ... FOR UPDATE`) in PostgreSQL for the checkout phase.
+*   **Justification:** During peak travel times (e.g., long weekends, festive seasons), a single popular resort might have 50 users competing for the last 2 rooms. Optimistic locking (using version numbers) would cause 48 of those transactions to fail with a `StaleObjectStateException` right at the payment step, leading to a terrible user experience and complex application-level retry logic. Pessimistic locking handles this contention gracefully by queuing requests at the database level.
+*   **Trade-off:** slightly higher latency and potential for database connection pool exhaustion if locks are held too long. We mitigate this by keeping the lock duration extremely short (only during the actual decrement operation, not the entire 10-minute payment window, which is handled by Redis).
+
+### 9.2. Eventual Consistency (Search) vs. Strict Consistency (Booking)
+*   **Decision:** The Search Service operates on eventually consistent data (Redis + ElasticSearch), while the Booking Service is strictly consistent (PostgreSQL).
+*   **Justification:** The read-to-write ratio in travel aggregators is massive (often > 1000:1). Forcing every search query to hit the source-of-truth database would require an unfeasibly large and expensive database cluster.
+*   **Trade-off:** A user might occasionally see "1 Room Available" on the search results page, but get a "Sold Out" error upon clicking "Book". This is a widely accepted industry standard; avoiding double-billing (Strict Consistency for Writes) is vastly more important than perfect search accuracy (Eventual Consistency for Reads).
+
+### 9.3. Choreography vs. Orchestration (Saga Pattern)
+*   **Decision:** Used an **Orchestration** approach for the Booking Saga, managed by the Booking Service.
+*   **Justification:** Creating a reservation spans inventory holds, payment processing, and channel manager syncing. If we used Choreography (services reacting to each other's events directly), understanding the state of a complex booking requires tracing events across multiple systems. Centralizing the state machine in the Booking Service makes rollbacks (e.g., refunding if inventory sync fails) deterministic and easier to debug.
+
+---
+
+## 10. Observability & Monitoring
+
+To guarantee 99.99% uptime, the system requires deep visibility into its distributed components. 
+
+### 10.1. Distributed Tracing
+*   **Tooling:** OpenTelemetry and Jaeger.
+*   **Implementation:** Every request entering the API Gateway is assigned a unique `X-Trace-Id`. This ID is injected into HTTP headers and Kafka message payloads, allowing us to visualize the exact path of a request across the Gateway, Search, Inventory, and Payment services. This is critical for identifying latency bottlenecks.
+
+### 10.2. Metrics & Dashboards
+*   **Tooling:** Prometheus and Grafana.
+*   **Key Service Level Indicators (SLIs):**
+    *   **Search Latency:** P95 and P99 response times for the `/search` endpoint (Target: < 200ms).
+    *   **Booking Success Rate:** Ratio of initiated bookings to confirmed bookings. A sudden drop indicates a payment gateway issue or widespread inventory sync failure.
+    *   **Redis Cache Hit Ratio:** Ensures our search cache is effectively shielding PostgreSQL.
+    *   **PostgreSQL Connection Pool Status:** Alerts on saturated DB connections, which often indicate locked rows taking too long to release.
+    *   **Channel Manager Sync Lag:** Time taken to process external aggregator webhooks.
+
+### 10.3. Centralized Logging
+*   **Tooling:** ELK Stack (Elasticsearch, Logstash, Kibana) or Datadog.
+*   **Implementation:** All microservices output structured JSON logs. We strictly mask PII (Personally Identifiable Information) and PCI data (credit card details) at the application layer before logs are shipped to the central cluster.
+
+---
+
+## 11. Follow-ups & Future Enhancements
+
+As the platform scales and business requirements evolve, the V2 architecture should address the following areas:
+
+### 11.1. Dynamic Pricing Engine
+Currently, prices are assumed to be static or manually updated. A machine learning-based pricing engine would consume historical booking data, local event schedules, and competitor pricing to adjust the `dynamic_price` column in real-time, maximizing revenue yield per room.
+
+### 11.2. Multi-Region Active-Active Deployment
+To survive a complete AWS/GCP region outage, the system would need to span multiple geographic regions. This requires moving from standard PostgreSQL to a globally distributed database (like CockroachDB or Amazon Aurora Global) to handle write conflicts across regions safely.
+
+### 11.3. GraphQL for Client APIs
+Mobile clients often suffer from "over-fetching" (downloading unnecessary data) with REST APIs. Introducing a GraphQL Federation layer at the API Gateway would allow mobile apps to request exactly what they need (e.g., just the price and image, without the full list of amenities), reducing payload size and improving perceived load times on slower cellular networks.
+
+### 11.4. Fraud Detection System
+Implementing behavioral analysis on the booking flow to detect card-testing bots or bulk inventory hoarding by malicious actors. This would sit as an async consumer off the API Gateway's traffic stream.
