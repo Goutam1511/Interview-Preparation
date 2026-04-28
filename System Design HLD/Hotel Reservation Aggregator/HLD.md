@@ -517,11 +517,9 @@ When a room is booked on an external aggregator (e.g., Agoda), they fire a webho
 
 ## 7. Sequence Diagrams / CUJ
 
-## 6. Sequence Diagrams & User Journeys
-
 The following user journeys illustrate the orchestration between the microservices. A key distinction in this updated architecture is the delegation of all inventory-related operations (both caching and persistence) exclusively to the **Inventory Service**.
 
-### 6.1. Search and Booking Journey
+### 7.1. Search and Booking Journey
 
 This journey covers the critical path from a user searching for a hotel to successfully confirming a reservation. It highlights the temporary locking mechanism to prevent double-booking during the checkout phase.
 
@@ -585,7 +583,7 @@ sequenceDiagram
     end
 ```
 
-### 6.2. Cancellation Journey
+### 7.2. Cancellation Journey
 This journey handles the reversal of a booking. It must ensure that inventory is immediately made available for other users to book and that refunds are triggered correctly.
 
 **Step-by-Step Flow:**
@@ -627,7 +625,8 @@ sequenceDiagram
     Booking-)Channel: Async: Push inventory addition
     Channel-)External OTAs: Sync Availability (+1)
 ```
-### 6.3. Modify Reservation Journey
+
+### 7.3. Modify Reservation Journey
 Modifying a reservation (e.g., changing dates or upgrading a room) is the most complex transaction. The system must secure the new inventory before releasing the old inventory to ensure the user is not left without a room if the new dates are sold out.
 
 **Step-by-Step Flow:**
@@ -690,6 +689,7 @@ sequenceDiagram
         Booking-->>User: Error: Cannot modify, desired dates unavailable
     end
 ```
+
 ---
 
 ## 8. 
