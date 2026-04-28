@@ -105,3 +105,88 @@ Because our system acts as both a direct booking engine and an aggregator, we sh
     *   **Inbound Webhook Processor (Pull/Receive):** Exposes secure endpoints for external OTAs to push their booking events. When an external booking occurs, this service translates the OTA's specific payload into our standard internal format and asks the Inventory Service to deduct a room.
     *   **Outbound Event Consumer (Push):** Listens to a Kafka topic for `InventoryUpdated` events. Whenever a room is booked directly on our platform, the Channel Manager consumes this event and makes parallel API calls to all connected external OTAs to reduce the inventory on their end.
     *   **Dead Letter Queues (DLQ) & Retry Logic:** External aggregator APIs can be unreliable. If an outbound sync fails, the message is routed to a retry queue with exponential backoff. If it fails repeatedly, it lands in a DLQ for manual intervention or automated reconciliation scripts to fix the sync drift later.
+ 
+## Persistence Layer Design
+
+To achieve high availability for reads and strict consistency for writes, the system employs a polyglot persistence strategy utilizing PostgreSQL, Redis, and ElasticSearch.
+
+### 1. Relational Database (PostgreSQL)
+
+PostgreSQL acts as the absolute source of truth for transactional data. It ensures ACID compliance, which is critical for the `room_inventory` and `reservations` tables to prevent double-booking.
+
+#### 1.1 Tables and Schema
+
+**Table: `hotels`**
+Stores core metadata about the properties.
+*   `id` (UUID, Primary Key)
+*   `name` (VARCHAR 255, Not Null)
+*   `description` (TEXT)
+*   `address_line` (VARCHAR 255)
+*   `city` (VARCHAR 100) - *e.g., "Bengaluru"*
+*   `state` (VARCHAR 100) - *e.g., "Karnataka"*
+*   `country` (VARCHAR 100)
+*   `latitude` (DECIMAL 10,8)
+*   `longitude` (DECIMAL 11,8)
+*   `status` (ENUM: 'ACTIVE', 'INACTIVE', 'SUSPENDED')
+*   `created_at` (TIMESTAMP, Default CURRENT_TIMESTAMP)
+*   `updated_at` (TIMESTAMP)
+
+**Table: `room_types`**
+Defines the categories of rooms available in a specific hotel.
+*   `id` (UUID, Primary Key)
+*   `hotel_id` (UUID, Foreign Key -> `hotels.id`)
+*   `name` (VARCHAR 100) - *e.g., "Deluxe King", "Standard Twin"*
+*   `max_occupancy` (INT, Not Null)
+*   `base_price` (DECIMAL 10,2)
+
+**Table: `room_inventory`**
+The most critical table for concurrency. It maintains the daily availability count per room type.
+*   `id` (UUID, Primary Key)
+*   `hotel_id` (UUID, Foreign Key -> `hotels.id`)
+*   `room_type_id` (UUID, Foreign Key -> `room_types.id`)
+*   `date` (DATE, Not Null)
+*   `total_allocated_rooms` (INT, Not Null)
+*   `available_rooms` (INT, Not Null) - *Constraint: `CHECK (available_rooms >= 0)`*
+*   `dynamic_price` (DECIMAL 10,2)
+*   **Indexes:**
+    *   `UNIQUE INDEX idx_inventory_unique (hotel_id, room_type_id, date)`
+    *   `INDEX idx_hotel_date (hotel_id, date)`
+
+**Table: `reservations`**
+Records the booking transaction details.
+*   `id` (UUID, Primary Key)
+*   `user_id` (UUID, Not Null)
+*   `hotel_id` (UUID, Foreign Key -> `hotels.id`)
+*   `check_in_date` (DATE, Not Null)
+*   `check_out_date` (DATE, Not Null)
+*   `status` (ENUM: 'PENDING_PAYMENT', 'CONFIRMED', 'CANCELLED', 'REFUNDED')
+*   `total_amount` (DECIMAL 10,2)
+*   `currency` (VARCHAR 3) - *e.g., "INR"*
+*   `created_at` (TIMESTAMP)
+*   **Indexes:**
+    *   `INDEX idx_user_reservations (user_id)`
+
+**Table: `reservation_rooms`**
+Maps multiple rooms/room types to a single reservation.
+*   `id` (UUID, Primary Key)
+*   `reservation_id` (UUID, Foreign Key -> `reservations.id`)
+*   `room_type_id` (UUID, Foreign Key -> `room_types.id`)
+*   `quantity` (INT, Not Null)
+*   `price_locked` (DECIMAL 10,2)
+
+---
+
+### 2. In-Memory Data Store (Redis)
+
+Redis is used for caching, distributed locking, and managing idempotency to handle high throughput and transient states.
+
+#### 2.1 Key Structures
+
+**1. Real-Time Inventory Cache**
+To avoid querying PostgreSQL for every search request.
+*   **Key:** `inventory:{hotel_id}:{date}`
+*   **Data Type:** Hash
+*   **Structure:**
+    *   Field: `{room_type_id}`
+    *   Value: `{"available": 4, "price": 4500.00}`
+*   **TTL:** Set to expire
