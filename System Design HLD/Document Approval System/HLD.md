@@ -14,6 +14,10 @@
 1. **High Scalability & Availability:** Must handle massive file uploads without degrading application server performance.
 2. **Fault Tolerance:** System must not lose documents or drop notifications.
 
+**Out Of Scope**
+1. Reading/Rendering files that don't support web view
+2. Fine-grained authorization for Auditors in internal review
+
 ### MVP Architecture Diagram
 ```mermaid
 graph TD
@@ -561,3 +565,55 @@ sequenceDiagram
         DLQ-->>Engineer: PagerDuty Alert (Manual Intervention)
     end
 ```
+
+# Architecture Supplement: Security, Authorization, and Read Path
+
+This document outlines the security boundaries, multi-tenant authorization mechanisms, and the document retrieval (read) path for the Enterprise Document Review System. Given the highly sensitive nature of HR and compliance data, this architecture strictly enforces defense-in-depth and zero-trust principles.
+
+---
+
+## 1. Authorization Mechanisms (AuthZ) & Multi-Tenancy
+
+We enforce security at three distinct layers: the Edge, the Application, and the Database. We do not trust any single layer to handle permissions alone.
+
+### Layer 1: The Edge (API Gateway)
+The API Gateway acts as the first line of defense, performing coarse-grained authorization before a request ever reaches an internal microservice.
+* **Identity Validation:** Validates the signature, expiration, and issuer of the incoming **JSON Web Token (JWT)**.
+* **Coarse-Grained RBAC:** Checks high-level role claims (`CUSTOMER` vs. `AUDITOR`). If a customer token attempts to access an `/api/internal/*` endpoint, the Gateway drops the request immediately with a `403 Forbidden` and logs the anomaly.
+
+### Layer 2: Application Layer (Document Service & Tenant Isolation)
+Because the system is a B2B multi-tenant SaaS application, the application layer must strictly enforce tenant isolation.
+* **Customer Access:** The JWT payload contains the user's `org_id` and `user_id`. When a customer requests a document, the Document Service explicitly verifies that the `customer_id` associated with the requested `document_id` in the database matches the token's `user_id`.
+* **Auditor Access (ABAC/Scope-based):** Auditors do not have blanket access to all documents. The service evaluates the auditor's specific scopes (e.g., "Auditor ID 554433 is only authorized to view `W4_FORM` documents for `org_id=123`").
+
+### Layer 3: Database Layer (Row-Level Security - RLS)
+As an ultimate enterprise safeguard, we enable **Row-Level Security (RLS)** in PostgreSQL. 
+* **The Mechanism:** When the Document Service connects to the database, it sets the current session context (e.g., `SET LOCAL app.current_user_id = 'user-123'`).
+* **The Benefit:** RLS policies at the table level ensure that a query like `SELECT * FROM documents` will *only* return rows where `customer_id = 'user-123'`. Even if an engineer introduces an application bug that omits the `WHERE` clause, the database prevents cross-tenant data leakage.
+
+---
+
+## 2. The Read Path: Fetching Document Previews
+
+Just as we prevent massive files from passing through our application servers during upload, we must strictly avoid proxying file bytes through our backend memory during document downloads or previews. We solve this using **Presigned GET URLs**.
+
+### The Standard Preview Workflow
+1. **The Request:** The user clicks "View Document" in the UI. The frontend application makes an API call: `GET /api/v1/documents/{document_id}/preview`.
+2. **Auth Validation:** The Document Service validates the user's session and verifies their authorization to view this specific document (using the 3-layer approach above).
+3. **URL Generation:** The Document Service uses the AWS SDK to request a temporary, read-only **Presigned URL** from S3. 
+    * *Security Constraint:* This URL is configured with a strict Time-to-Live (TTL), typically 5 minutes, mitigating the risk of the link being copied and shared maliciously.
+4. **The Response:** The backend returns the URL to the frontend.
+5. **Direct Fetch & Render:** The user's browser uses the Presigned URL to fetch the file bytes directly from the S3 bucket. If the file is a web-compatible format (PDF, PNG, JPEG), the browser renders it inline.
+
+### Edge Case: Handling Non-Renderable Formats
+** Out of Scope **
+
+---
+
+## 3. Data Protection: Encryption
+
+To comply with stringent data privacy laws, all document payloads are encrypted at every stage of their lifecycle.
+
+* **In Transit:** All communications between the client, API Gateway, microservices, and S3 are enforced via **TLS 1.3**.
+* **At Rest (Storage):** The S3 bucket is configured with **SSE-KMS** (Server-Side Encryption with AWS Key Management Service). We use Customer Managed Keys (CMKs) to encrypt the file blobs. If an unauthorized entity gains access to the underlying AWS physical drives, the data remains cryptographically shredded and unreadable.
+* **At Rest (Database):** The PostgreSQL volumes (e.g., AWS EBS volumes) are fully encrypted at rest to protect metadata and audit logs.
