@@ -106,7 +106,7 @@ Because our system acts as both a direct booking engine and an aggregator, we sh
     *   **Outbound Event Consumer (Push):** Listens to a Kafka topic for `InventoryUpdated` events. Whenever a room is booked directly on our platform, the Channel Manager consumes this event and makes parallel API calls to all connected external OTAs to reduce the inventory on their end.
     *   **Dead Letter Queues (DLQ) & Retry Logic:** External aggregator APIs can be unreliable. If an outbound sync fails, the message is routed to a retry queue with exponential backoff. If it fails repeatedly, it lands in a DLQ for manual intervention or automated reconciliation scripts to fix the sync drift later.
  
-## Persistence Layer Design
+## 4. Persistence Layer Design
 
 To achieve high availability for reads and strict consistency for writes, the system employs a polyglot persistence strategy utilizing PostgreSQL, Redis, and ElasticSearch.
 
@@ -189,4 +189,282 @@ To avoid querying PostgreSQL for every search request.
 *   **Structure:**
     *   Field: `{room_type_id}`
     *   Value: `{"available": 4, "price": 4500.00}`
-*   **TTL:** Set to expire
+*   **TTL:** Set to expire after the date has passed.
+
+**2. Distributed Locks (Pessimistic Locking)**
+Used when a user initiates the checkout process to temporarily hold inventory.
+*   **Key:** `lock:inventory:{room_type_id}:{date}`
+*   **Data Type:** String
+*   **Value:** `{user_id}`
+*   **TTL:** 10 Minutes (600 seconds). If payment is not completed, the key expires and inventory is freed.
+
+**3. Idempotency Keys**
+Prevents duplicate bookings if a network request is retried.
+*   **Key:** `idempotency:booking:{uuid}`
+*   **Data Type:** String
+*   **Value:** `{ "status": "CONFIRMED", "reservation_id": "..." }`
+*   **TTL:** 24 Hours.
+
+---
+
+### 3. Search Engine (ElasticSearch)
+
+ElasticSearch powers the read-heavy discovery phase, handling complex text searches, faceted filtering, and geospatial queries.
+
+#### 3.1 Document Mapping: `hotels_index`
+
+```json
+{
+  "mappings": {
+    "properties": {
+      "hotel_id": { "type": "keyword" },
+      "name": { 
+        "type": "text",
+        "analyzer": "standard"
+      },
+      "description": { "type": "text" },
+      "location": { 
+        "type": "geo_point" 
+      },
+      "city": { "type": "keyword" },
+      "amenities": { "type": "keyword" },
+      "star_rating": { "type": "float" },
+      "review_score": { "type": "float" },
+      "room_types": {
+        "type": "nested",
+        "properties": {
+          "room_type_id": { "type": "keyword" },
+          "name": { "type": "keyword" },
+          "base_price": { "type": "double" }
+        }
+      }
+    }
+  }
+}
+```
+#### 3.2 Sync Strategy
+** Static Data (Name, Amenities, Location):** Synced from PostgreSQL to ElasticSearch via CDC (Change Data Capture) tools like Debezium, triggered whenever hotel metadata is updated.
+
+** Dynamic Data (Availability):** Not stored in ElasticSearch. The Search Service queries ElasticSearch for matching properties, then performs a real-time cross-check against Redis to filter out sold-out hotels before returning the final payload to the user.
+
+## 4. API Specifications (REST)
+
+The system exposes RESTful APIs for clients (Web/Mobile) and webhooks for external integrations. All endpoints assume a base URL of `https://api.domain.com` and require standard JWT-based authorization (except for public search).
+
+### 4.1. Search Hotels (Public)
+Fetches available hotels based on location, dates, and occupancy. Merges static data from ElasticSearch with real-time availability from Redis.
+
+**Endpoint:** `GET /api/v1/hotels/search`
+
+**Query Parameters:**
+*   `location` (String, Required): e.g., "Koramangala", "Bengaluru", "MG Road"
+*   `check_in` (Date YYYY-MM-DD, Required): e.g., "2026-05-10"
+*   `check_out` (Date YYYY-MM-DD, Required): e.g., "2026-05-12"
+*   `rooms` (Integer, Required): Number of rooms needed.
+*   `guests` (Integer, Optional): Total number of guests.
+*   `page` (Integer, Optional): Default `1`.
+
+**Response:** `200 OK`
+```json
+{
+  "metadata": {
+    "total_results": 124,
+    "page": 1
+  },
+  "data": [
+    {
+      "hotel_id": "h-9876-abcd",
+      "name": "Grand Stay Bengaluru",
+      "location": {
+        "address": "100 Feet Road, Indiranagar",
+        "coordinates": [77.6411, 12.9715]
+      },
+      "amenities": ["Free WiFi", "Breakfast Included", "Pool"],
+      "available_room_types": [
+        {
+          "room_type_id": "rt-1234-xyz",
+          "name": "Deluxe Double Room",
+          "price_per_night": 4500.00,
+          "currency": "INR",
+          "available_count": 3
+        }
+      ]
+    }
+  ]
+}
+```
+### 4.2. Create Reservation (Protected)
+Initiates a new booking. Holds the inventory temporarily using Redis distributed locks while awaiting payment confirmation.
+
+**Endpoint:** `POST /api/v1/reservations`
+
+**Headers:** `Authorization: Bearer <JWT_TOKEN>`
+
+**Idempotency-Key:** uuid (Crucial for safely retrying network timeouts)
+
+**Request Payload:
+
+```json
+{
+  "hotel_id": "h-9876-abcd",
+  "check_in": "2026-05-10",
+  "check_out": "2026-05-12",
+  "rooms": [
+    {
+      "room_type_id": "rt-1234-xyz",
+      "quantity": 1
+    }
+  ],
+  "primary_guest": {
+    "name": "Rahul Sharma",
+    "email": "rahul.s@example.com",
+    "phone": "+919876543210"
+  }
+}
+```
+**Response:** `201 Created`
+
+```json
+{
+  "reservation_id": "res-5555-qwerty",
+  "status": "PENDING_PAYMENT",
+  "total_amount": 9000.00,
+  "currency": "INR",
+  "expires_at": "2026-04-28T23:00:00+05:30",
+  "payment_gateway_url": "[https://checkout.razorpay.com/pay/xyz123](https://checkout.razorpay.com/pay/xyz123)"
+}
+```
+### 4.3. Modify Reservation (Protected)
+Allows users to change dates or add/remove rooms. Involves complex fare recalculation and inventory availability checks.
+
+**Endpoint:** `PATCH /api/v1/reservations/{reservation_id}`
+
+**Request Payload:
+
+```json
+{
+  "new_check_out": "2026-05-13",
+  "rooms": [
+    {
+      "room_type_id": "rt-1234-xyz",
+      "quantity": 2 
+    }
+  ]
+}
+```
+**Response:** `200 OK`
+
+```json
+{
+  "reservation_id": "res-5555-qwerty",
+  "status": "MODIFICATION_PENDING_PAYMENT",
+  "fare_difference": 9000.00,
+  "currency": "INR",
+  "payment_gateway_url": "[https://checkout.razorpay.com/pay/abc987](https://checkout.razorpay.com/pay/abc987)"
+}
+```
+### 4.4. Cancel Reservation (Protected)
+Cancels a booking, frees up PostgreSQL inventory, invalidates Redis cache, and triggers async refunds.
+
+**Endpoint:** `DELETE /api/v1/reservations/{reservation_id}`
+
+**Response:** `200 OK`
+
+```json
+{
+  "reservation_id": "res-5555-qwerty",
+  "status": "CANCELLED",
+  "refund_details": {
+    "refund_amount": 9000.00,
+    "currency": "INR",
+    "status": "INITIATED",
+    "estimated_days": "5-7 business days"
+  }
+}
+```
+### 4.5. Channel Manager Webhook (Internal/B2B)
+Endpoint for external Online Travel Agencies (like MakeMyTrip, Agoda) to notify our system when they sell one of our rooms, ensuring our central DB stays updated.
+
+**Endpoint:** `POST /api/v1/webhooks/channel-manager/inventory`
+
+**Headers:**
+
+`X-Signature: HMAC SHA256 signature for payload verification.`
+
+**Request Payload:**
+
+```json
+{
+  "source": "MakeMyTrip",
+  "external_booking_id": "MMT-999888",
+  "hotel_id": "h-9876-abcd",
+  "room_type_id": "rt-1234-xyz",
+  "check_in": "2026-05-10",
+  "check_out": "2026-05-12",
+  "rooms_booked": 1
+}
+```
+**Response: `202 Accepted`
+(The system accepts the payload and processes the inventory deduction asynchronously).
+
+## 7. Sequence Diagrams / CUJ
+
+### **Search and Booking Journey**
+```
+sequenceDiagram
+    participant User
+    participant Gateway as API Gateway
+    participant Search as Search Service
+    participant Booking as Booking Service
+    participant InvDB as Inventory DB (Postgres)
+    participant Channel as Channel Manager
+
+    User->>Gateway: GET /search?location=blr&dates...
+    Gateway->>Search: Fetch available hotels
+    Search-->>User: Return List & Prices
+    
+    User->>Gateway: POST /reservations
+    Gateway->>Booking: Init Reservation (Idempotency Key)
+    
+    Booking->>InvDB: BEGIN Transaction
+    Booking->>InvDB: SELECT available_rooms FOR UPDATE
+    alt Rooms Available
+        Booking->>InvDB: UPDATE available_rooms = available_rooms - 1
+        Booking->>InvDB: COMMIT
+        Booking-->>User: Return Reservation (Status: PENDING_PAYMENT)
+        
+        User->>Gateway: Complete Payment
+        Gateway->>Booking: Webhook: Payment Success
+        Booking->>InvDB: Update Reservation (Status: CONFIRMED)
+        Booking-->>User: Booking Confirmed!
+        
+        Booking->>Channel: Async: Push inventory update
+        Channel->>External OTAs: Sync Availability
+    else Sold Out
+        Booking->>InvDB: ROLLBACK
+        Booking-->>User: Error: Rooms no longer available
+    end
+```
+
+### **Cancellation Journey**
+```
+sequenceDiagram
+    participant User
+    participant Gateway as API Gateway
+    participant Booking as Booking Service
+    participant InvDB as Inventory DB
+    participant Channel as Channel Manager
+
+    User->>Gateway: DELETE /reservations/{id}
+    Gateway->>Booking: Process Cancellation
+    
+    Booking->>InvDB: BEGIN Transaction
+    Booking->>InvDB: Update Reservation (Status: CANCELLED)
+    Booking->>InvDB: UPDATE available_rooms = available_rooms + 1
+    Booking->>InvDB: COMMIT
+    
+    Booking-->>User: Cancellation Success (Refund Initiated)
+    
+    Booking->>Channel: Async: Push inventory update (+1)
+    Channel->>External OTAs: Sync Availability
+```
