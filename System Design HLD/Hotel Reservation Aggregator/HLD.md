@@ -243,9 +243,9 @@ ElasticSearch powers the read-heavy discovery phase, handling complex text searc
 }
 ```
 #### 3.2 Sync Strategy
-** Static Data (Name, Amenities, Location):** Synced from PostgreSQL to ElasticSearch via CDC (Change Data Capture) tools like Debezium, triggered whenever hotel metadata is updated.
+**Static Data (Name, Amenities, Location):** Synced from PostgreSQL to ElasticSearch via CDC (Change Data Capture) tools like Debezium, triggered whenever hotel metadata is updated.
 
-** Dynamic Data (Availability):** Not stored in ElasticSearch. The Search Service queries ElasticSearch for matching properties, then performs a real-time cross-check against Redis to filter out sold-out hotels before returning the final payload to the user.
+**Dynamic Data (Availability):** Not stored in ElasticSearch. The Search Service queries ElasticSearch for matching properties, then performs a real-time cross-check against Redis to filter out sold-out hotels before returning the final payload to the user.
 
 ## 5. API Specifications (REST)
 
@@ -302,7 +302,7 @@ Initiates a new booking. Holds the inventory temporarily using Redis distributed
 
 **Idempotency-Key:** uuid (Crucial for safely retrying network timeouts)
 
-**Request Payload:
+**Request Payload:**
 
 ```json
 {
@@ -339,7 +339,7 @@ Allows users to change dates or add/remove rooms. Involves complex fare recalcul
 
 **Endpoint:** `PATCH /api/v1/reservations/{reservation_id}`
 
-**Request Payload:
+**Request Payload:**
 
 ```json
 {
@@ -404,7 +404,7 @@ Endpoint for external Online Travel Agencies (like MakeMyTrip, Agoda) to notify 
   "rooms_booked": 1
 }
 ```
-**Response: `202 Accepted`
+**Response:** `202 Accepted`
 (The system accepts the payload and processes the inventory deduction asynchronously).
 
 ## 6. Caching & Concurrency Handling (Deep Dive)
@@ -518,7 +518,7 @@ When a room is booked on an external aggregator (e.g., Agoda), they fire a webho
 ## 7. Sequence Diagrams / CUJ
 
 ### **Search and Booking Journey**
-```
+```mermaid
 sequenceDiagram
     participant User
     participant Gateway as API Gateway
@@ -555,7 +555,7 @@ sequenceDiagram
 ```
 
 ### **Cancellation Journey**
-```
+```mermaid
 sequenceDiagram
     participant User
     participant Gateway as API Gateway
