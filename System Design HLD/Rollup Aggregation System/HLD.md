@@ -1,4 +1,4 @@
-# High-Level Design (HLD): Event Rollup-Aggregation System
+# Event Rollup-Aggregation System
 
 ## 1. Functional Requirements
 * **Event Ingestion:** The system must accept telemetry/analytical events sent from various client applications via SDKs.
@@ -25,12 +25,12 @@
 graph TD
     %% Define Nodes
     subgraph Clients
-        SDK[Client SDKs<br/>(Batching, Retries)]
+        SDK[Client SDKs<br/>Batching, Retries]
     end
 
     subgraph Ingestion_Layer
         LB[Load Balancer /<br/>API Gateway]
-        IS[Ingestion Service<br/>(Stateless)]
+        IS[Ingestion Service<br/>Stateless]
         Redis[(Redis Cluster<br/>Idempotency Store)]
     end
 
@@ -39,11 +39,11 @@ graph TD
     end
 
     subgraph Processing_Layer
-        Flink[Stream Processor<br/>(Flink/Spark Streaming)]
+        Flink[Stream Processor<br/>Flink/Spark Streaming]
     end
 
     subgraph Storage_Layer
-        TSDB[(Time-Series DB<br/>ClickHouse)]
+        TSDB[Time-Series DB<br/>ClickHouse]
     end
 
     subgraph Consumption_Layer
