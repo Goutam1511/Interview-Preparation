@@ -473,6 +473,70 @@ This document details the responsibilities of each component in the Enterprise H
 *   **Primary Database (PostgreSQL):** Relational store for users, document metadata, and the append-only review audit log. Optimized with indexes on `customer_id` and `status`.
 *   **Object Storage (AWS S3):** Stores the actual file blobs. Configured with automated Lifecycle Policies (transition to Glacier after 30 days, delete after 90 days).
 
+
+### 1.5 Cluster Topology & Infrastructure
+
+Given the system's reliance on AWS (S3, KMS), we deploy **Amazon MSK (Managed Streaming for Apache Kafka)** to minimize operational overhead while guaranteeing enterprise-grade availability.
+
+*   **Multi-AZ Deployment:** The cluster is deployed across 3 Availability Zones (AZs) to survive datacenter-level outages.
+*   **Replication Factor (RF):** Set to `3`. Every message is replicated to three separate brokers.
+*   **Minimum In-Sync Replicas (min.insync.replicas):** Set to `2`. This ensures that a successful write requires acknowledgment from at least two brokers, preventing data loss if a leader node crashes immediately after a write.
+
+---
+
+### 1.6. Topic Design & Partitioning Strategy
+
+We decouple the system using specific, domain-driven topics. 
+
+#### Topic 1: `s3.document.uploads.v1`
+*   **Producer:** AWS EventBridge (listening to S3 `ObjectCreated` events).
+*   **Consumer:** Workflow Service (Consumer Group: `cg-workflow-uploads`).
+*   **Partition Key:** `document_id`.
+*   **Rationale:** Using `document_id` guarantees that all events regarding a specific document go to the same partition, ensuring strict chronological ordering for that document. It also prevents "hot partitions" (which would happen if we keyed by `org_id` and a massive enterprise uploaded 10,000 W-4 forms simultaneously).
+
+#### Topic 2: `notification.outbound.v1`
+*   **Producer:** Workflow Service (triggers after Temporal SLA timer or Auditor review).
+*   **Consumer:** Notification Service (Consumer Group: `cg-notification-senders`).
+*   **Partition Key:** `customer_id`.
+*   **Rationale:** Keying by `customer_id` ensures that a single user receives their notifications in the exact order they were generated, preventing confusing race conditions (e.g., receiving an "Approved" email before the "Upload Received" email).
+
+---
+
+### 1.7 Producer & Consumer Guarantees
+
+To meet strict HR compliance and SLA requirements, we cannot drop messages. 
+
+### Producer Configuration
+*   `acks = all`: The producer will not consider an event "sent" until all in-sync replicas have acknowledged it.
+*   `enable.idempotence = true`: Prevents duplicate messages at the Kafka level if a network blip causes the producer to retry a successful send.
+
+### Consumer Configuration (At-Least-Once Delivery)
+*   `enable.auto.commit = false`: We completely disable auto-committing. 
+*   **Commit Strategy:** The Workflow and Notification services only commit their read offsets *after* they have successfully updated the Postgres database or received a `200 OK` from the third-party email provider (SendGrid/SES). If the service crashes mid-process, the offset is not committed, and the new pod will re-process the message.
+
+---
+
+### 1.8 Fault Tolerance: The DLQ & Retry Architecture
+
+Because Kafka does not have native delayed-retry queues (like SQS), we implement a multi-topic retry pattern for the `notification.outbound.v1` topic to handle transient third-party email outages.
+
+1.  **Main Topic:** `notification.outbound.v1`
+2.  **Retry Topic:** `notification.retry.v1` 
+3.  **Dead Letter Queue (DLQ):** `notification.dlq.v1`
+
+**The Retry Flow:**
+*   If the Notification Service fails to send an email (e.g., SendGrid returns a `503 Service Unavailable`), the consumer catches the exception.
+*   Instead of blocking the entire partition, it publishes the event to `notification.retry.v1` (with a header indicating the retry count) and commits the offset on the main topic.
+*   A separate consumer group slowly polls the retry topic. If it fails 3 times, the message is pushed to `notification.dlq.v1`.
+*   **Alerting:** Datadog monitors the DLQ. Any message landing here instantly triggers a high-priority PagerDuty alert for on-call engineers to manually investigate, ensuring zero dropped compliance notifications.
+
+---
+
+### 1.9 Data Retention & Security
+
+*   **Retention Policy:** Set to `7 days` (`log.retention.hours=168`). Kafka is used as an event bus, not a permanent database. Seven days provides ample buffer for weekend outages or prolonged system debugging.
+*   **Encryption in Transit:** Enforced via TLS 1.3 for all producer and consumer traffic.
+*   **Authentication (AuthN & AuthZ):** Services authenticate to MSK using **AWS IAM Access Control**. Only the explicitly authorized IAM Roles attached to the Workflow and Notification ECS/EKS pods can publish or subscribe to these specific topics.
 ---
 
 ## 2. Sequence Diagrams
