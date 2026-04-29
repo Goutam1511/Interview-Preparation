@@ -185,7 +185,49 @@ GET /v1/metrics?name=page_load_time&start_time=2026-04-28T00:00:00%2B05:30&end_t
 
 `504 Gateway Timeout: The database query took too long to execute (usually requires narrowing the time range or optimizing tags).`
 
-## 6. Sequence Diagrams
+## 6. Persistence and Data Model
+
+**1. Redis (Idempotency Store):**
+* **Key:** `idemp:{client_id}:{X-Idempotency-Key}`
+* **Value:** `status` (PROCESSING, COMPLETED)
+* **TTL:** 24 to 48 hours to cover the standard retry window.
+
+**2. Time-Series Database (e.g., ClickHouse):**
+* **Table: `metrics_rollup_15m`**
+  * `metric_name` (String, Partition Key)
+  * `bucket_time` (Timestamp, Sort Key) - *Stored in UTC, queried with +05:30 offset if required by clients.*
+  * `tags_hash` (UInt64)
+  * `tags` (Map/JSON)
+  * `count` (UInt64)
+  * `sum` (Float64)
+  * `min` (Float64)
+  * `max` (Float64)
+* **Tables: `metrics_rollup_1h`** and **`metrics_rollup_1d`** (Similar schema, coarser `bucket_time`).
+
+## 7. Caching Strategies
+
+* **Ingestion Cache (Redis):** Used exclusively for checking idempotency keys at the API edge. Must be highly available (Redis Cluster). Fast O(1) lookups prevent duplicate processing before events even hit the message queue.
+* **State Checkpointing (Stream Processor Local State):** The aggregation workers maintain an in-memory cache (e.g., RocksDB embedded in Flink) to accumulate sums, counts, mins, and maxes for the current 15m window. This prevents database thrashing by ensuring we only write to the TSDB when the time window closes or a watermark is reached.
+* **Query Caching (Read Path):** While out of scope for the ingestion pipeline, a read-heavy UI caching layer (like a CDN or Redis) is highly recommended for the `1d` rollups, as historical 1-day data becomes immutable once the window completely closes.
+
+## 8. Deep dive on Rollup-Aggregation - Strategies and Algorithms
+
+* **Hierarchical Rollup Strategy:** Instead of computing 15m, 1h, and 1d rollups directly from the raw data stream (which wastes compute and memory), we use a cascading approach:
+  1. **Raw -> 15m:** The stream processor consumes raw events, groups by `(metric_name, tags, 15m_floor_timestamp)`, calculates aggregates, and emits to the DB.
+  2. **15m -> 1h:** A scheduled job (or secondary stream) reads the newly closed 15m rollups. It aggregates four 15m buckets into one 1h bucket.
+  3. **1h -> 1d:** A similar job aggregates twenty-four 1h buckets into one 1d bucket.
+
+* **Windowing Algorithm:** We utilize **Tumbling Windows** (fixed-size, non-overlapping time intervals) aligned to the epoch.
+
+* **Handling Late Events (Watermarks):** Due to client disconnection or network lag, events might arrive late. We define a "watermark" threshold (e.g., allow events up to 2 hours late). If an event falls into an already-closed 15m window, the stream processor triggers an "update" routine to recalculate and execute an idempotent upsert to overwrite that specific bucket in the TSDB.
+
+## 9. Concurrency handling and distributed workflow - ensuring sync
+
+* **Partitioning for Parallelism:** Kafka topics are partitioned by a consistent hash of `(metric_name + tags_hash)`. This guarantees that all events belonging to the same aggregation bucket are deterministically routed to the *same* worker node. This eliminates the need for complex distributed locks during aggregation.
+* **Exactly-Once Processing Semantics:** To prevent data drift (over-counting or under-counting), the Stream Processor utilizes a two-phase commit protocol with the storage layer or relies on idempotent upserts in the TSDB (e.g., using `ReplacingMergeTree` in ClickHouse).
+* **State Sync and Fault Tolerance:** If an aggregation worker dies mid-window, the processing engine's checkpointing mechanism (saving state snapshots to S3/HDFS every 10 seconds) allows a new worker to take over the partition and resume from the last known state without double-counting Kafka messages.
+
+## 10. Sequence Diagrams
 ### Write Path
 
 ```mermaid
@@ -265,3 +307,15 @@ sequenceDiagram
     
     API-->>-User: 200 OK Aggregated Time-Series Data
 ```
+
+## 11. Trade-off decisions made
+
+1. **At-Least-Once Delivery to Kafka vs. Exactly-Once Pipeline:** 
+   * *Decision:* We handle idempotency at the ingestion API edge (via Redis) to prevent client retries from duplicating. From Kafka onwards, we rely on idempotent database upserts rather than complex, globally synchronized transactions.
+   * *Trade-off:* Simplifies the ingestion system and keeps write throughput extremely high, but pushes the deduplication burden to the database engine's background merge processes.
+2. **Cascading Rollups vs. Parallel Rollups:**
+   * *Decision:* Using cascading/hierarchical rollups (15m -> 1h -> 1d).
+   * *Trade-off:* Highly optimizes compute and DB I/O. The downside is that 1h and 1d dashboards experience a slight pipeline delay (they must wait for the underlying 15m windows to close before computing), which is an acceptable compromise for analytical workloads.
+3. **Client Timestamp vs. Server Timestamp:**
+   * *Decision:* Aggregations are strictly bucketed based on the `timestamp` generated by the client, *not* the server ingestion time.
+   * *Trade-off:* This is crucial for accurate business telemetry, but requires complex handling of late arrivals, watermarking, and defensive filtering against extreme clock skew (e.g., dropping events dated years in the past/future).
