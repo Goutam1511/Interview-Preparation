@@ -381,3 +381,52 @@ We explicitly chose Tumbling Windows for the ingestion pipeline due to the follo
 
 **C. Analytical Standard**
 Most downstream visualization tools (dashboards, bar charts, line graphs) inherently plot data in contiguous, non-overlapping chronological chunks. Tumbling windows directly map to the X-axis pixels of standard analytical UI components.
+
+## 14. Kafka Architecture and Multi-Tenancy Strategy
+
+The Messaging Layer (Kafka) acts as the critical shock absorber between the highly concurrent ingestion API and the stateful stream processing engine. It must be configured for high throughput, fault tolerance, and fair resource allocation among diverse clients.
+
+### 14.1 Kafka Cluster Setup and Topic Configuration
+
+Since the stream processor (Flink) consumes data in near real-time, and we rely on the Time-Series DB (ClickHouse) for raw event fallback and historical querying, Kafka does *not* need to be a long-term storage system. 
+
+**Topic Configuration (`telemetry_events_topic`):**
+* **Retention Period (`retention.ms`):** `43200000` (12 hours). This provides enough buffer for Flink to recover from a multi-hour outage without bloating Kafka storage costs. 
+* **Replication Factor:** `3`. Ensures high availability. If one broker dies, two copies remain.
+* **Min In-Sync Replicas (`min.insync.replicas`):** `2`. Guarantees durability. The ingestion service will only receive an acknowledgment if the data is safely written to at least two brokers.
+* **Producer Acks:** `acks=all`. The ingestion API enforces this to prevent data loss.
+* **Partition Count:** High (e.g., 100 to 500 partitions). We heavily over-partition the topic relative to our Kafka broker count to allow maximum horizontal scaling of Flink TaskManagers.
+
+---
+
+### 14.2 Handling Hot Partitions (The Noisy Neighbor Problem)
+
+Previously, our partition key was defined as the hash of `(metric_name + tags_hash)`. If a "whale" client sends 50,000 events/sec for a single metric (e.g., `page_load`), while a "minnow" client sends 10 events/sec, the partition assigned to the whale's metric will become a massive bottleneck, causing consumer lag and memory pressure.
+
+We implement two parallel strategies to resolve this: **Routing Isolation** and **Key Salting**.
+
+#### Strategy A: Multi-Tenant Routing (The VIP Lane)
+We separate traffic physically at the topic level to prevent the whale's data spikes from starving the minnow's processing pipeline.
+
+* **Default Pool:** `topic: events_shared_pool` (Used by 95% of standard/free-tier clients).
+* **Dedicated VIP Pools:** `topic: events_ent_<client_id>` (Provisioned exclusively for enterprise/whale clients).
+* **Ingestion Logic:** The Ingestion Service checks an in-memory configuration map (synced via Consul/etcd) to resolve the `client_id` to its assigned Kafka topic before publishing.
+
+#### Strategy B: Key Salting and Two-Phase Aggregation
+Even within a dedicated VIP topic, a massive influx of a *single* metric will still cause a hot partition. We solve this by breaking the strict partitioning rule and modifying the Flink pipeline using the MapReduce paradigm.
+
+1. **Salting the Partition Key (Write Path):** 
+   Instead of hashing just the metric and tags, the Ingestion Service appends a random integer (the "salt") to the key.
+   * *New Partition Key:* `Hash(metric_name + tags_hash + random(1, N))`
+   * *Effect:* The whale's massive event stream for `page_load` is now evenly sprayed across `N` different Kafka partitions, distributing the load across multiple brokers and Flink workers.
+
+2. **Two-Phase Aggregation (Read Path / Flink):**
+   Because events for the same bucket are now scattered across different workers, a single worker can no longer compute the final sum/count. Flink must perform a two-stage aggregation:
+   
+   * **Phase 1: Local Aggregation (Pre-Combine):** The workers read the salted partitions. They perform a local tumbling window aggregation on the salted key. Instead of writing to the DB, they emit a *partial aggregate*.
+     *(e.g., Worker 1 computes Count=5000 for Salt_1; Worker 2 computes Count=4500 for Salt_2).*
+   * **Phase 2: Global Aggregation (Reduce):** The stream is re-keyed within Flink by stripping the salt (using the original `metric_name + tags_hash`). A single downstream Flink task receives the partial aggregates, sums them together `(5000 + 4500 = 9500)`, and writes the final exact rollup to the TSDB.
+
+**Trade-off Decision Made:**
+* *Decision:* Implement Key Salting with Two-Phase Aggregation for all high-volume metrics.
+* *Trade-off:* Eliminates Kafka hotspots and prevents Flink OutOfMemory (OOM) crashes, but slightly increases the CPU overhead and internal network shuffle within the Flink cluster. This is a highly acceptable trade-off for system stability.
