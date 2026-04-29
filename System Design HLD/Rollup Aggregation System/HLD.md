@@ -76,6 +76,10 @@ graph TD
 
 ## 5. API Specifications
 
+### 5.1 Write Path: Event Ingestion API
+
+Used by client SDKs to publish batches of analytical events to the server.
+
 **Endpoint:** `POST /v1/events/batch`
 **Headers:**
 * `Authorization: Bearer <token>`
@@ -104,6 +108,82 @@ graph TD
   ]
 }
 ```
+**Responses:**
+
+`202 Accepted: Batch queued successfully.`
+
+`200 OK: Batch already processed (Idempotency hit).`
+
+`400 Bad Request: Invalid payload.`
+
+`429 Too Many Requests: Rate limit exceeded.`
+
+### 5.2 Read Path: Metric Query API
+
+Used by frontend dashboards or internal analytical services to fetch aggregated time-series data. The system automatically routes the query to the optimized `15m`, `1h`, or `1d` rollup table based on the `granularity` parameter.
+
+**Endpoint:** `GET /v1/metrics`
+
+**Headers:**
+* `Authorization`: `Bearer <token>`
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description | Example |
+| :--- | :--- | :--- | :--- | :--- |
+| `name` | String | Yes | The precise name of the metric to query. | `page_load_time` |
+| `start_time` | String | Yes | ISO 8601 timestamp for the start of the query window. | `2026-04-28T00:00:00+05:30` |
+| `end_time` | String | Yes | ISO 8601 timestamp for the end of the query window. | `2026-04-29T11:55:00+05:30` |
+| `granularity` | Enum | Yes | Time bucket size. Maps to underlying tables. Valid values: `15m`, `1h`, `1d`. | `1h` |
+| `aggregation` | Enum | No | The statistical function to apply. Valid values: `sum`, `count`, `avg`, `min`, `max`. Defaults to `avg`. | `avg` |
+| `tags` | String | No | Comma-separated key-value pairs for filtering dimensions. | `platform:web,country:IN` |
+
+**Example Request:**
+
+```http
+GET /v1/metrics?name=page_load_time&start_time=2026-04-28T00:00:00%2B05:30&end_time=2026-04-29T11:55:00%2B05:30&granularity=1h&aggregation=avg&tags=platform:web
+```
+**Success Response (200 OK):**
+```json
+{
+  "query_metadata": {
+    "metric_name": "page_load_time",
+    "granularity": "1h",
+    "aggregation": "avg",
+    "filters": {
+      "platform": "web"
+    },
+    "total_datapoints": 24
+  },
+  "data": [
+    {
+      "timestamp": "2026-04-28T00:00:00+05:30",
+      "value": 1.23
+    },
+    {
+      "timestamp": "2026-04-28T01:00:00+05:30",
+      "value": 1.45
+    },
+    {
+      "timestamp": "2026-04-28T02:00:00+05:30",
+      "value": 1.10
+    }
+    // ... remaining data points
+  ]
+}
+```
+
+**HTTP Response Codes:**
+
+`200 OK: Query successful.`
+
+`400 Bad Request: Invalid time ranges (e.g., start_time > end_time), invalid granularity, or malformed tags.`
+
+`401 Unauthorized: Invalid or missing authentication token.`
+
+`404 Not Found: Metric name does not exist.`
+
+`504 Gateway Timeout: The database query took too long to execute (usually requires narrowing the time range or optimizing tags).`
 
 ## 6. Sequence Diagrams
 ### Write Path
