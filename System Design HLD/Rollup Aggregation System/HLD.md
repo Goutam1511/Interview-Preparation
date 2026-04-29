@@ -171,7 +171,7 @@ sequenceDiagram
         Note right of API: Query Planning Logic
         alt Range > 30 days
             Note right of API: Select table: metrics_rollup_1d
-        alt Range > 24 hours AND < 30 days
+        else Range > 24 hours AND < 30 days
             Note right of API: Select table: metrics_rollup_1h
         else Range < 24 hours
             Note right of API: Select table: metrics_rollup_15m
@@ -179,9 +179,9 @@ sequenceDiagram
     end
 
     API->>+TSDB: SELECT bucket_time, avg(sum/count) FROM metrics_rollup_1h WHERE... GROUP BY bucket_time
-    TSDB-->>-API: Result Set
+    TSDB-->-API: Result Set
     
     Note over API: Format JSON response
     
-    API-->>-User: 200 OK (Aggregated Time-Series Data)
+    API-->>-User: 200 OK Aggregated Time-Series Data
 ```
